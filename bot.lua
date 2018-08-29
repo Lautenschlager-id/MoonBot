@@ -329,7 +329,7 @@ local moonPhase = function()
 	local daysElapsed = (Y + M + day - 694039.09) / 29.5305882
 	daysElapsed = math.floor(((daysElapsed % 1) * 8) + .5)
 
-	if daysElapsed > 8 then daysElapsed = 0 end
+	if daysElapsed >= 8 then daysElapsed = 0 end
 	return daysElapsed + 1 -- [ 1 : 8 ]
 end
 
