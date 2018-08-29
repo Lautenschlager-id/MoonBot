@@ -269,8 +269,9 @@ local ajaxList = os.readFile("Info/Forum/members", "*l")
 local channels = {
 	guild = os.readFile("Info/Channel/guild", "*l"),
 	modules = os.readFile("Info/Channel/modules", "*l"),
-	apps = os.readFile("Info/Channel/applications", "*l"),
+	applications = os.readFile("Info/Channel/applications", "*l"),
 	flood = os.readFile("Info/Channel/flood", "*l"),
+	notifications = os.readFile("Info/Channel/notifications", "*l")
 }
 local roles = {
 	dev = os.readFile("Info/Role/dev", "*l"),
@@ -1152,7 +1153,7 @@ local clockMin = function()
 		end)
 
 		if #toCheck > 0 then
-			local channel = client:getChannel(channels.modules) -- #modules
+			local channel = client:getChannel(channels.notifications) -- #notifications
 			for topic = 1, #toCheck do
 				local message = forumClient:getPage(toCheck[topic][3])
 
@@ -1222,7 +1223,7 @@ local clockHour = function()
 		end)
 
 		if #topics > 0 then
-			client:getChannel(channels.modules):send({ -- #modules
+			client:getChannel(channels.applications):send({ -- #applications
 				embed = {
 					color = color.info,
 					title = "<:atelier:458403092417740824> New comments in applications!",
@@ -1234,18 +1235,18 @@ local clockHour = function()
 			})
 		end
 		if #newApplications > 0 then
-				local announcements = client:getChannel(channels.apps) -- #applications
-				for application = 1, #newApplications do
-					announcements:send({
-						embed = {
-							color = color.info,
-							title = "<:atelier:458403092417740824> New application",
-							description = ":eye: [**" .. newApplications[application][2] .. "**](" .. newApplications[application][1] .. ")",
-							timestamp = discordia.Date():toISO()
-						}
-					})
-				end
+			local announcements = client:getChannel(channels.applications) -- #applications
+			for application = 1, #newApplications do
+				announcements:send({
+					embed = {
+						color = color.info,
+						title = "<:atelier:458403092417740824> New application",
+						description = ":eye: [**" .. newApplications[application][2] .. "**](" .. newApplications[application][1] .. ")",
+						timestamp = discordia.Date():toISO()
+					}
+				})
 			end
+		end
 		if #toCheck > 0 then
 			for page = 1, #toCheck do
 				forumClient:getPage(toCheck[page])
