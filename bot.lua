@@ -369,7 +369,7 @@ local htmlToMarkdown = function(str)
 		elseif x == "text-decoration:underline" then
 			markdown = "__"
 		elseif x == "text-decoration:line-through" then
-			markdown = '~'
+			markdown = "~~"
 		end
 		return markdown .. content .. markdown
 	end)
