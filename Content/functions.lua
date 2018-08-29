@@ -14,10 +14,10 @@ os.readFile = function(file, format)
 	file = io.open(file, "r")
 	
 	format = format or "*a"
-	local _file = file:read(format)
+	local out = file:read(format)
 	file:close()		
 	
-	return _file
+	return out
 end
 
 table.fconcat = function(tbl, sep, f, i, j)

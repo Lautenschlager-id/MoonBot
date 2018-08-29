@@ -50,10 +50,10 @@ local splitByLine = function(content)
 end
 local pairsByIndexes = function(list,f)
 	local out = {}
-	for index in next,list do
+	for index in next, list do
 		out[#out + 1] = index
 	end
-	table.sort(out,f)
+	table.sort(out, f)
 	
 	local i = 0
 	return function()
@@ -61,9 +61,9 @@ local pairsByIndexes = function(list,f)
 		if out[i] == nil then
 			return nil
 		else
-			return out[i],list[out[i]]
+			return out[i], list[out[i]]
 		end
-    end
+	end
 end
 
 require("Content/functions")
