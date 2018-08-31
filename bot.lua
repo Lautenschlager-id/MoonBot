@@ -861,11 +861,11 @@ end
 local attachFile = function(fileData, fileExtension)
 	local out = {
 		boundaries[2],
-		'Content-Disposition:form-data;name="/KEY1/"',
+		'Content-Disposition: form-data;name="/KEY1/"',
 		"\r\n/KEY2/",
 		boundaries[2],
-		'Content-Disposition:form-data;name="fichier";filename="MoonBot_Upload.' .. fileExtension .. '"',
-		"Content-Type:image/" .. fileExtension .. "\r\n",
+		'Content-Disposition: form-data; name="fichier"; filename="MoonBot_Upload.' .. fileExtension .. '"',
+		"Content-Type: image/" .. fileExtension .. "\r\n",
 		fileData,
 		boundaries[3]
 	}
@@ -902,7 +902,7 @@ local alias = {
 -- syntax => Command syntax
 -- connection => Whether the command uses the forum client connection or not, do not execute until the client is connected
 -- highlevel => Whether the command works only for helpers or not
--- sys => Whether the command is a debug command. (Bot owner command)
+-- sys => Whether the command is invisible or not. Usually for debug commands or commands in test.
 -- fn(msg, param) => The function
 commands["adoc"] = {
 	description = "Gets information about a specific tfm api function.",
@@ -1904,7 +1904,7 @@ local clockMin = function()
 	if minutes == 1 or minutes % 15 == 0 then
 		checkPrivateMessages()
 	end
-	if minutes == 1 or minutes % 20 then
+	if minutes == 1 or minutes % 20 == 0 then
 		local newStatus = table.random(botStatus)
 		client:setGame(table.random(newStatus[2]))
 		client:setStatus(newStatus[1])
