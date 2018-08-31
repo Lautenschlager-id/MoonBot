@@ -68,6 +68,8 @@ end
 
 require("Content/functions")
 
+local boundaries = { }
+
 local forum
 do
 	local _, openssl = pcall(require, "openssl")
@@ -191,7 +193,7 @@ do
 			end
 		end
 
-		self.page = function(self, pageName, postData, ajax, keyLocation)
+		self.page = function(self, pageName, postData, ajax, keyLocation, fileBody)
 			local keys = self.getKeys(self, keyLocation or ajax)
 
 			local headers = self.headers(self)
@@ -199,7 +201,7 @@ do
 				headers[3] = { "Accept", "application/json, text/javascript, */*; q=0.01" }
 				headers[4] = { "Accept-Language", "en-US,en;q=0.9" }
 				headers[5] = { "X-Requested-With", "XMLHttpRequest" }
-				headers[6] = { "Content-Type", "application/x-www-form-urlencoded; charset=UTF-8" }
+				headers[6] = { "Content-Type", (fileBody and "multi-part/form-data; boundary=" .. boundaries[1] or "application/x-www-form-urlencoded; charset=UTF-8") }
 				headers[7] = { "Referer", "https://atelier801.com/" .. ajax }
 				headers[8] = { "Connection", "keep-alive" }
 			end
@@ -207,9 +209,11 @@ do
 			postData = postData or { }
 			postData[#postData + 1] = keys
 
-			local header, body = http.request("POST", "https://atelier801.com/" .. pageName, headers, table.fconcat(postData, '&', function(index, value)
+			local header, body = http.request("POST", "https://atelier801.com/" .. pageName, headers, (fileBody and string.gsub(fileBody, "/KEY(%d)/", function(id)
+				return keys[tonumber(id)]
+			end, 2) or table.fconcat(postData, '&', function(index, value)
 				return value[1] .. "=" .. encodeUrl(value[2])
-			end))
+			end)))
 
 			self.setCookies(self, header)
 
@@ -265,13 +269,19 @@ local messages = {
 }
 local section = os.readFile("Info/Forum/section", "*l")
 local ajaxList = os.readFile("Info/Forum/members", "*l")
+local imageHost = {
+	link = os.readFile("Info/Forum/image-ajax", "*l"),
+	host = os.readFile("Info/Forum/image", "*l")
+}
 
 local channels = {
 	guild = os.readFile("Info/Channel/guild", "*l"),
+	announcements = os.readFile("Info/Channel/announcements", "*l"),
 	modules = os.readFile("Info/Channel/modules", "*l"),
 	applications = os.readFile("Info/Channel/applications", "*l"),
 	flood = os.readFile("Info/Channel/flood", "*l"),
-	notifications = os.readFile("Info/Channel/notifications", "*l")
+	notifications = os.readFile("Info/Channel/notifications", "*l"),
+	logs = os.readFile("Info/Channel/logs", "*l"),
 }
 local roles = {
 	dev = os.readFile("Info/Role/dev", "*l"),
@@ -281,7 +291,7 @@ local roles = {
 local botNames = { "Jerry", "ModuleAPI", "MoonAPI", "Moon", "FroggyJerry", "MoonForMice", "MoonduleAPI", "MoonBot", "ModuleBot", "JerryForMice", "JerryForMoon", "MoonPie" }
 local botAvatars = { }
 local botStatus = {
-	{ "online", { "I'm ready!", "Yoohoo", "LUA or Phyton, that's the question", ":jerry:", "Ping @Pikashu", "Atelier801 Forums" } },
+	{ "online", { "I'm ready to be used!", "Yoohoo", "LUA or Phyton, that's the question", ":jerry:", "Ping @Pikashu", "Atelier801 Forums" } },
 	{ "idle", { "Waiting Pikashu to update the API", "Waiting my Java application to compile", "Pong @Streaxx", "Editing TFM API", "Checking the moon" } },
 	{ "dnd", { "Taking shower BRB", "I am stressed, do /moon", "My disk is almost full", "Reading applications", "Marriage proposal to Sharpiebot" } }
 }
@@ -310,6 +320,10 @@ local toDelete = setmetatable({}, {
 })
 
 local hasPermission = function(member, roleId)
+	if member.id == client.owner.id then -- test purpose
+		return true
+	end
+
 	return not not member.roles:find(function(role)
 		return role.id == roleId
 	end)
@@ -330,8 +344,441 @@ local moonPhase = function()
 	local daysElapsed = (Y + M + day - 694039.09) / 29.5305882
 	daysElapsed = math.floor(((daysElapsed % 1) * 8) + .5)
 
-	if daysElapsed >= 8 then daysElapsed = 0 end
-	return daysElapsed + 1 -- [ 1 : 8 ]
+	return bit.band(daysElapsed, 7) + 1
+end
+
+local updateLayout = function(skip)
+	if skip or os.date("%H") == "00" then
+		client:getGuild(channels.guild):getMember(client.user.id):setNickname(table.random(botNames))
+		client:setAvatar(botAvatars[moonPhase()])
+	end
+end
+
+local envTfm
+do
+	local trim = function(n)
+		return bit.band(n, 0xFFFFFFFF)
+	end
+
+	local mask = function(width)
+		return bit.bnot(bit.lshift(0xFFFFFFFF, width))
+	end
+
+	local fieldArgs = function(field, width)
+		width = width or 1
+		assert(field >= 0, "field cannot be negative")
+		assert(width > 0, "width must be positive")
+		assert(field + width <= 32, "trying to access non-existent bits")
+		return field, width
+	end
+
+	local emptyFunction = function() end
+	envTfm = {
+		-- API
+		assert = assert,
+		bit32 = {
+			arshift = function(x, disp)
+				return math.floor(x / (2 ^ disp))
+			end,
+			band = bit.band,
+			bnot = bit.bnot,
+			bor = bit.bor,
+			btest = function(...)
+				return bit.band(...) ~= 0
+			end,
+			bxor = bit.bxor,
+			extract = function(n, field, width)
+				field, width = fieldArgs(field, width)
+				return bit.band(bit.rshift(n, field), mask(width))
+			end,
+			lshift = bit.lsfhit,
+			replace = function(n, v, field, width)
+				field, width = fieldArgs(field, width)
+				width = mask(width)
+				return bit.bor(bit.band(n, bit.bnot(bit.lshift(m, f))), bit.lshift(bit.band(v, m), f))
+			end,
+			rshift = bit.rshift
+		},
+		coroutine = table.copy(coroutine),
+		debug = {
+			disableEventLog = emptyFunction,
+			disableTimerLog = emptyFunction
+		},
+		error = emptyFunction,
+		getmetatable = getmetatable,
+		ipairs = ipairs,
+		math = table.copy(math),
+		next = next,
+		os = {
+			date = os.date,
+			difftime = os.difftime,
+			time = os.time
+		},
+		pairs = pairs,
+		pcall = pcall,
+		print = print,
+		rawequal = rawequal,
+		rawget = rawget,
+		rawlen = rawlen,
+		rawset = rawset,
+		select = select,
+		setmetatable = setmetatable,
+		string = table.copy(string),
+		system = {
+			bindKeyboard = emptyFunction,
+			bindMouse = emptyFunction,
+			disableChatCommandDisplay = emptyFunction,
+			exit = emptyFunction,
+			giveEventGift = emptyFunction,
+			loadFile = emptyFunction,
+			loadPlayerData = emptyFunction,
+			newTimer = emptyFunction,
+			removeTimer = emptyFunction,
+			saveFile = emptyFunction,
+			savePlayerData = emptyFunction
+		},
+		table = {
+			concat = table.concat,
+			foreach = table.foreach,
+			foreachi = table.foreachi,
+			insert = table.insert,
+			pack = table.pack,
+			remove = table.remove,
+			sort = table.sort,
+			unpack = table.unpack
+		},
+		tfm = {
+			enum = {
+				emote = {
+					dance = 0,
+					laugh = 1,
+					cry = 2,
+					kiss = 3,
+					angry = 4,
+					clap = 5,
+					sleep = 6,
+					facepaw = 7,
+					sit = 8,
+					confetti = 9,
+					flag = 10,
+					marshmallow = 11,
+					selfie = 12,
+					highfive = 13,
+					highfive_1 = 14,
+					highfive_2 = 15,
+					partyhorn = 16,
+					hug = 17,
+					hug_1 = 18,
+					hug_2 = 19,
+					jigglypuff = 20,
+					kissing = 21,
+					kissing_1 = 22,
+					kissing_2 = 23,
+					carnaval = 24,
+					rockpaperscissors = 25,
+					rockpaperscissors_1 = 26,
+					rockpaperscissor_2 = 27
+				},
+				ground = {
+					wood = 0,
+					ice = 1,
+					trampoline = 2,
+					lava = 3,
+					chocolate = 4,
+					earth = 5,
+					grass = 6,
+					sand = 7,
+					cloud = 8,
+					water = 9,
+					stone = 10,
+					snow = 11,
+					rectangle = 12,
+					circle = 13,
+					invisible = 14,
+					web = 15,
+				},
+				particle = {
+					whiteGlitter = 0,
+					blueGlitter = 1,
+					orangeGlitter = 2,
+					cloud = 3,
+					dullWhiteGlitter = 4,
+					heart = 5,
+					bubble = 6,
+					tealGlitter = 9,
+					spirit = 10,
+					yellowGlitter = 11,
+					ghostSpirit = 12,
+					redGlitter = 13,
+					waterBubble = 14,
+					plus1 = 15,
+					plus10 = 16,
+					plus12 = 17,
+					plus14 = 18,
+					plus16 = 19,
+					meep = 20,
+					redConfetti = 21,
+					greenConfetti = 22,
+					blueConfetti = 23,
+					yellowConfetti = 24,
+					diagonalRain = 25,
+					curlyWind = 26,
+					wind = 27,
+					rain = 28,
+					star = 29,
+					littleRedHeart = 30,
+					littlePinkHeart = 31,
+					daisy = 32,
+					bell = 33,
+					egg = 34,
+					projection = 35,
+					mouseTeleportation = 36,
+					shamanTeleportation = 37,
+					lollipopConfetti = 38,
+					yellowCandyConfetti = 39,
+					pinkCandyConfetti = 40
+				},
+				shamanObject = {
+					arrow = 0,
+					littleBox = 1,
+					box = 2,
+					littleBoard = 3,
+					board = 4,
+					ball = 6,
+					trampoline = 7,
+					anvil = 10,
+					cannon = 17,
+					bomb = 23,
+					orangePortal = 26,
+					bluePortal = 26,
+					balloon = 28,
+					blueBalloon = 28,
+					redBalloon = 29,
+					greenBalloon = 30,
+					yellowBalloon = 31,
+					rune = 32,
+					chicken = 33,
+					snowBall = 34,
+					cupidonArrow = 35,
+					apple = 39,
+					sheep = 40,
+					littleBoardIce = 45,
+					littleBoardChocolate = 46,
+					iceCube = 54,
+					cloud = 57,
+					bubble = 59,
+					tinyBoard = 60,
+					companionCube = 61,
+					stableRune = 62,
+					balloonFish = 65,
+					longBoard = 67,
+					triangle = 68,
+					sBoard = 69,
+					paperPlane = 80,
+					rock = 85,
+					pumpkinBall = 89,
+					tombstone = 90,
+					paperBall = 95
+				}
+			},
+			exec = {
+				addConjuration = emptyFunction,
+				addImage = emptyFunction,
+				addJoint = emptyFunction,
+				addPhysicObject = emptyFunction,
+				addShamanObject = emptyFunction,
+				bindKeyboard = emptyFunction,
+				chatMessage = emptyFunction,
+				disableAfkDeath = emptyFunction,
+				disableAllShamanSkills = emptyFunction,
+				disableAutoNewGame = emptyFunction,
+				disableAutoScore = emptyFunction,
+				disableAutoShaman = emptyFunction,
+				disableAutoTimeLeft = emptyFunction,
+				disableDebugCommand = emptyFunction,
+				disableMinimalistMode = emptyFunction,
+				disableMortCommand = emptyFunction,
+				disablePhysicalConsumables = emptyFunction,
+				disableWatchCommand = emptyFunction,
+				displayParticle = emptyFunction,
+				explosion = emptyFunction,
+				giveCheese = emptyFunction,
+				giveConsumables = emptyFunction,
+				giveMeep = emptyFunction,
+				killPlayer = emptyFunction,
+				lowerSyncDelay = emptyFunction,
+				moveObject = emptyFunction,
+				movePlayer = emptyFunction,
+				newGame = emptyFunction,
+				playEmote = emptyFunction,
+				playerVictory = emptyFunction,
+				removeImage = emptyFunction,
+				removeJoint = emptyFunction,
+				removeObject = emptyFunction,
+				removePhysicObject = emptyFunction,
+				respawnPlayer = emptyFunction,
+				setAutoMapFlipMode = emptyFunction,
+				setGameTime = emptyFunction,
+				setNameColor = emptyFunction,
+				setPlayerScore = emptyFunction,
+				setRoomMaxPlayers = emptyFunction,
+				setRoomPassword = emptyFunction,
+				setShaman = emptyFunction,
+				setUIMapName = emptyFunction,
+				setUIShamanName = emptyFunction,
+				setVampirePlayer = emptyFunction,
+				snow = emptyFunction
+			},
+			get = {
+				misc = {
+					apiVersion = 0.26,
+					transformiceVersion = 5.81
+				},
+				room = {
+					community = "en",
+					currentMap = 0,
+					maxPlayers = 50,
+					mirroredMap = false,
+					name = "en-#lua",
+					objectList = {
+						[1] = {
+							angle = 0,
+							baseType = 2,
+							colors = {
+								0xFF0000,
+								0xFF00,
+								0xFF
+							},
+							ghost = false,
+							id = 1,
+							type = 203,
+							vx = 0,
+							vy = 0,
+							x = 400,
+							y = 200
+						}
+					},
+					passwordProtected = false,
+					playerList = {
+						["Tigrounette#0001"] = {
+							community = "en",
+							hasCheese = false,
+							id = 0,
+							inHardMode = 0,
+							isDead = true,
+							isFacingRight = true,
+							isJumping = false,
+							isShaman = false,
+							isVampire = false,
+							look = "1;0,0,0,0,0,0,0,0,0",
+							movingLeft = false,
+							movingRight = false,
+							playerName = "Tigrounette#0001",
+							registrationDate = 0,
+							score = 0,
+							shamanMode = 0,
+							title = 0,
+							vx = 0,
+							vy = 0,
+							x = 0,
+							y = 0
+						}
+					},
+					uniquePlayers = 2,
+					xmlMapInfo = {
+						author = "Tigrounette#0001",
+						mapCode = 184924,
+						permCode = 1,
+						xml = "<C><P /><Z><S /><D /><O /></Z></C>"
+					}
+				}
+			}
+		},
+		tonumber = tonumber,
+		tostring = tostring,
+		type = type,
+		ui = {
+			addPopup = emptyFunction,
+			addTextArea = emptyFunction,
+			removeTextArea = emptyFunction,
+			setMapName = emptyFunction,
+			setShamanName = emptyFunction,
+			showColorPicker = emptyFunction,
+			updateTextArea = emptyFunction
+		},
+		xpcall = xpcall,
+
+		-- Events
+		eventChatCommand = emptyFunction,
+		eventChatMessage = emptyFunction,
+		eventEmotePlayed = emptyFunction,
+		eventFileLoaded = emptyFunction,
+		eventFileSaved = emptyFunction,
+		eventKeyboard = emptyFunction,
+		eventMouse = emptyFunction,
+		eventLoop = emptyFunction,
+		eventNewGame = emptyFunction,
+		eventNewPlayer = emptyFunction,
+		eventPlayerDataLoaded = emptyFunction,
+		eventPlayerDied = emptyFunction,
+		eventPlayerGetCheese = emptyFunction,
+		eventPlayerLeft = emptyFunction,
+		eventPlayerVampire = emptyFunction,
+		eventPlayerWon = emptyFunction,
+		eventPlayerRespawn = emptyFunction,
+		eventPopupAnswer = emptyFunction,
+		eventSummoningStart = emptyFunction,
+		eventSummoningCancel = emptyFunction,
+		eventSummoningEnd = emptyFunction,
+		eventTextAreaCallback = emptyFunction,
+		eventColorPicked = emptyFunction
+	}
+
+	envTfm.bit32.lrotate = function(x, disp)
+		if disp == 0 then
+			return x
+		elseif disp < 0 then
+			return bit.rrotate(x, -disp)
+		else
+			disp = bit.band(disp, 31)
+			x = trim(x)
+			return trim(bit.bor(bit.lshift(x, disp), bit.rshift(x, (32 - disp))))
+		end
+	end
+	envTfm.bit32.rrotate = function(x, disp)
+		if disp == 0 then
+			return x
+		elseif disp < 0 then
+			return bit.lrotate(x, -disp)
+		else
+			disp = bit.band(disp, 31)
+			x = trim(x)
+			return trim(bit.bor(bit.rshift(x, disp), bit.lshift(x, (32 - disp))))
+		end
+	end
+	envTfm.math.log10 = nil
+	envTfm.math.round = nil
+	envTfm.math.percent = nil
+	envTfm.math.clamp = nil
+	envTfm.string.endswith = nil
+	envTfm.string.packsize = nil
+	envTfm.string.superTrim = nil
+	envTfm.string.nickname = nil
+	envTfm.string.split = nil
+	envTfm.string.startswith = nil
+	envTfm.string.levenshtein = nil
+	envTfm.string.random = nil
+	envTfm.string.trim = nil
+	envTfm.string.unpack = nil
+	envTfm.string.pad = nil
+	envTfm.string.pack = nil
+	envTfm.tfm.get.room.playerList["Pikashu#0001"] = envTfm.tfm.get.room.playerList["Tigrounette#0001#0001"]
+end
+
+do
+	boundaries[1] = "MoonBot_" .. os.time()
+	boundaries[2] = "--" .. boundaries[1]
+	boundaries[3] = boundaries[2] .. "--"
 end
 
 --[[ Forum ]]--
@@ -351,7 +798,7 @@ local playerExists = function(playerName)
 	playerName = normalizePlayerName(playerName)
 
 	local header, body = http.request("GET", "https://atelier801.com/profile?pr=" .. encodeUrl(playerName))
-	return not string.find(body, 'La requête contient un ou plusieurs paramètres invalides.'), playerName
+	return not string.find(body, "La requête contient un ou plusieurs paramètres invalides."), playerName
 end
 
 local applicationExists = function(playerName)
@@ -411,6 +858,20 @@ local removeHtmlFormat = function(str)
 	return str
 end
 
+local attachFile = function(fileData, fileExtension)
+	local out = {
+		boundaries[2],
+		'Content-Disposition:form-data;name="/KEY1/"',
+		"\r\n/KEY2/",
+		boundaries[2],
+		'Content-Disposition:form-data;name="fichier";filename="MoonBot_Upload.' .. fileExtension .. '"',
+		"Content-Type:image/" .. fileExtension .. "\r\n",
+		fileData,
+		boundaries[3]
+	}
+	return table.concat(out, "\r\n")
+end
+
 --[[ Commands ]]--
 local hasParam = function(message, parameters)
 	if not parameters or #parameters == 0 then
@@ -418,7 +879,7 @@ local hasParam = function(message, parameters)
 			content = "<@!" .. message.author.id .. ">",
 			embed = {
 				color = color.fail,
-				title = "<:wheel:456198795768889344> Missing parameters.",
+				title = "<:wheel:456198795768889344> Missing or invalid parameters.",
 				description = "Type **!help command** to read its description and syntax."
 			}
 		})
@@ -432,99 +893,102 @@ local alias = {
 	["accept"] = "terms",
 	["applications"] = "apps",
 	["deny"] = "reject",
-	['m'] = "members"	
+	['m'] = "members",
+	['i'] = "upload",
+	["img"] = "upload"
 }
 
 -- description => Description of the command, appears in !help
 -- syntax => Command syntax
 -- connection => Whether the command uses the forum client connection or not, do not execute until the client is connected
 -- highlevel => Whether the command works only for helpers or not
+-- sys => Whether the command is a debug command. (Bot owner command)
 -- fn(msg, param) => The function
 commands["adoc"] = {
 	description = "Gets information about a specific tfm api function.",
 	syntax = "!adoc function_name",
 	fn = function(message, parameters)
-		if parameters and #parameters > 0 then
-			local head, body = http.request("GET", "https://atelier801.com/topic?f=826122&t=924910")
+		if not hasParam(message, parameters) then return end
 
-			if body then
-				body = string.gsub(string.gsub(body, "<br />", "\n"), " ", "")
-				local _, init = string.find(body, "id=\"message_19463601\">•")
-				body = string.sub(body, init)
+		local head, body = http.request("GET", "https://atelier801.com/topic?f=826122&t=924910")
 
-				local syntax, description = string.match(body, "•  (" .. parameters .. " .-)\n(.-)\n\n\n\n")
+		if body then
+			body = string.gsub(string.gsub(body, "<br />", "\n"), " ", "")
+			local _, init = string.find(body, "id=\"message_19463601\">•")
+			body = string.sub(body, init)
 
-				if syntax then
-					description = string.gsub(description, "&sect;", "§")
-					description = string.gsub(description, "&middot;", ".")
-					description = string.gsub(description, "&gt;", ">")
-					description = string.gsub(description, "&lt;", "<")
-					description = string.gsub(description, "&quot;", "\"")
-					description = string.gsub(description, "&#(%d+)", function(dec) return string.char(dec) end)
+			local syntax, description = string.match(body, "•  (" .. parameters .. " .-)\n(.-)\n\n\n\n")
 
-					local info = {
-						desc = { },
-						param = { },
-						ret = nil
-					}
+			if syntax then
+				description = string.gsub(description, "&sect;", "§")
+				description = string.gsub(description, "&middot;", ".")
+				description = string.gsub(description, "&gt;", ">")
+				description = string.gsub(description, "&lt;", "<")
+				description = string.gsub(description, "&quot;", "\"")
+				description = string.gsub(description, "&#(%d+)", function(dec) return string.char(dec) end)
 
-					for line in string.gmatch(description, "[^\n]+") do
-						if not string.find(line, "^Parameters") and not string.find(line, "^Arguments") then
-							local i, e = string.find(line, "^[%-~] ")
+				local info = {
+					desc = { },
+					param = { },
+					ret = nil
+				}
+
+				for line in string.gmatch(description, "[^\n]+") do
+					if not string.find(line, "^Parameters") and not string.find(line, "^Arguments") then
+						local i, e = string.find(line, "^[%-~] ")
+						if i then
+							local param = string.sub(line, e + 1)
+
+							local list, desc = string.match(param, "(.-) ?: (.+)")
+
+							if list then
+								local params = { }
+								for name, type in string.gmatch(list, "(%w+) %((.-)%)") do
+									params[#params + 1] = "`" .. type .. "` **" .. name .. "**"
+								end
+
+								if #params > 0 and desc then
+									param = table.concat(params, ", ") .. " ~> " .. desc
+								end
+							end
+
+							info.param[#info.param + 1] = (string.sub(line, 1, 1) == "~" and "- " or "") .. param
+						else
+							i, e = string.find(line, "^Returns: ")
 							if i then
 								local param = string.sub(line, e + 1)
+								local type, desc = string.match(param, "^%((.-)%) (.+)")
 
-								local list, desc = string.match(param, "(.-) ?: (.+)")
-
-								if list then
-									local params = { }
-									for name, type in string.gmatch(list, "(%w+) %((.-)%)") do
-										params[#params + 1] = "`" .. type .. "` **" .. name .. "**"
-									end
-
-									if #params > 0 and desc then
-										param = table.concat(params, ", ") .. " ~> " .. desc
-									end
+								if type then
+									param = "`" .. type .. "` : " .. desc
 								end
 
-								info.param[#info.param + 1] = (string.sub(line, 1, 1) == "~" and "- " or "") .. param
+								info.ret = param
 							else
-								i, e = string.find(line, "^Returns: ")
-								if i then
-									local param = string.sub(line, e + 1)
-									local type, desc = string.match(param, "^%((.-)%) (.+)")
-
-									if type then
-										param = "`" .. type .. "` : " .. desc
-									end
-
-									info.ret = param
-								else
-									info.desc[#info.desc + 1] = line
-								end
+								info.desc[#info.desc + 1] = line
 							end
 						end
 					end
-
-					toDelete[message.id] = message:reply({
-						content = "<@!" .. message.author.id .. ">",
-						embed = {
-							color = color.info,
-							title = "<:atelier:458403092417740824> " .. syntax,
-							description = table.concat(info.desc, "\n") .. (#info.param > 0 and ("\n\n**Arguments / Parameters**\n" .. table.concat(info.param, "\n")) or "") .. (info.ret and ("\n\n**Returns**\n" .. info.ret) or ""),
-							footer = { text = "TFM API Documentation" },
-						}
-					})
-				else
-					toDelete[message.id] = message:reply({
-						content = "<@!" .. message.author.id .. ">",
-						embed = {
-							color = color.info,
-							title = "<:atelier:458403092417740824> TFM API Documentation",
-							description = "The function **" .. parameters .. "** was not found in the documentation."
-						}
-					})
 				end
+
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.info,
+						title = "<:atelier:458403092417740824> " .. syntax,
+						description = table.concat(info.desc, "\n") .. (#info.param > 0 and ("\n\n**Arguments / Parameters**\n" .. table.concat(info.param, "\n")) or "") .. (info.ret and ("\n\n**Returns**\n" .. info.ret) or ""),
+						footer = { text = "TFM API Documentation" },
+					}
+				})
+			else
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.info,
+						title = "<:atelier:458403092417740824> TFM API Documentation",
+						description = "The function **" .. parameters .. "** was not found in the documentation."
+					}
+				})
 			end
 		end
 	end
@@ -632,66 +1096,140 @@ commands["doc"] = {
 	description = "Gets information about a specific lua function.",
 	syntax = "!doc function_name",
 	fn = function(message, parameters)
-		if parameters and #parameters > 0 then
-			local head, body = http.request("GET", "http://www.lua.org/work/doc/manual.html")
+		if not hasParam(message, parameters) then return end
 
-			if body then
-				local syntax, description = string.match(body, "<a name=\"pdf%-" .. parameters .. "\"><code>(.-)</code></a></h3>[\n<p>]*(.-)<hr>")
+		local head, body = http.request("GET", "http://www.lua.org/work/doc/manual.html")
 
-				if syntax then
-					-- Normalizing tags
-					syntax = string.gsub(syntax, "&middot;", ".")
+		if body then
+			local syntax, description = string.match(body, "<a name=\"pdf%-" .. parameters .. "\"><code>(.-)</code></a></h3>[\n<p>]*(.-)<hr>")
 
-					description = string.gsub(description, "<b>(.-)</b>", "**%1**")
-					description = string.gsub(description, "<em>(.-)</em>", "_%1_")
-					description = string.gsub(description, "<li>(.-)</li>", "\n- %1")
+			if syntax then
+				-- Normalizing tags
+				syntax = string.gsub(syntax, "&middot;", ".")
 
-					description = string.gsub(description, "<code>(.-)</code>", "`%1`")
-					description = string.gsub(description, "<pre>(.-)</pre>", function(code)
-						return "```LUA¨" .. (string.gsub(string.gsub(code, "\n", "¨"), "¨     ", "¨")) .. "```"
-					end)
+				description = string.gsub(description, "<b>(.-)</b>", "**%1**")
+				description = string.gsub(description, "<em>(.-)</em>", "_%1_")
+				description = string.gsub(description, "<li>(.-)</li>", "\n- %1")
 
-					description = string.gsub(description, "&sect;", "§")
-					description = string.gsub(description, "&middot;", ".")
-					description = string.gsub(description, "&nbsp;", " ")
-					description = string.gsub(description, "&gt;", ">")
-					description = string.gsub(description, "&lt;", "<")
+				description = string.gsub(description, "<code>(.-)</code>", "`%1`")
+				description = string.gsub(description, "<pre>(.-)</pre>", function(code)
+					return "```LUA¨" .. (string.gsub(string.gsub(code, "\n", "¨"), "¨     ", "¨")) .. "```"
+				end)
 
-					description = string.gsub(description, "<a href=\"(#.-)\">(.-)</a>", "[%2](https://www.lua.org/manual/5.2/manual.html%1)")
+				description = string.gsub(description, "&sect;", "§")
+				description = string.gsub(description, "&middot;", ".")
+				description = string.gsub(description, "&nbsp;", " ")
+				description = string.gsub(description, "&gt;", ">")
+				description = string.gsub(description, "&lt;", "<")
 
-					description = string.gsub(description, "\n", " ")
-					description = string.gsub(description, "¨", "\n")
-					description = string.gsub(description, "<p>", "\n\n")
+				description = string.gsub(description, "<a href=\"(#.-)\">(.-)</a>", "[%2](https://www.lua.org/manual/5.2/manual.html%1)")
 
-					description = string.gsub(description, "<(.-)>(.-)</%1>", "%2")
+				description = string.gsub(description, "\n", " ")
+				description = string.gsub(description, "¨", "\n")
+				description = string.gsub(description, "<p>", "\n\n")
 
-					local lines = splitByChar(description)
+				description = string.gsub(description, "<(.-)>(.-)</%1>", "%2")
 
-					local toRem = { }
-					for i = 1, #lines do
-						toRem[i] = message:reply({
-							content = (i == 1 and "<@!" .. message.author.id .. ">" or nil),
-							embed = {
-								color = color.info,
-								title = (i == 1 and ("<:lua:483421987499147292> " .. syntax) or nil),
-								description = lines[i],
-								footer = { text = "Lua Documentation" }
-							}
-						})
-					end
-					toDelete[message.id] = toRem
-				else
-					toDelete[message.id] = message:reply({
-						content = "<@!" .. message.author.id .. ">",
+				local lines = splitByChar(description)
+
+				local toRem = { }
+				for i = 1, #lines do
+					toRem[i] = message:reply({
+						content = (i == 1 and "<@!" .. message.author.id .. ">" or nil),
 						embed = {
 							color = color.info,
-							title = "<:lua:483421987499147292> Lua Documentation",
-							description = "The function **" .. parameters .. "** was not found in the documentation."
+							title = (i == 1 and ("<:lua:483421987499147292> " .. syntax) or nil),
+							description = lines[i],
+							footer = { text = "Lua Documentation" }
 						}
 					})
 				end
+				toDelete[message.id] = toRem
+			else
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.info,
+						title = "<:lua:483421987499147292> Lua Documentation",
+						description = "The function **" .. parameters .. "** was not found in the documentation."
+					}
+				})
 			end
 		end
+	end
+}
+commands["eval"] = {
+	description = "Checks if the provided code would run in Transformice or not.",
+	syntax = "!eval link / \\`\\`\\`Code\\`\\`\\`",
+	fn = function(message, parameters)
+		if not hasParam(message, parameters) then return end
+
+		if string.find(parameters, '`') then
+			local _
+			_, parameters = string.match(parameters, "`(`?`?)(.*)%1`")		
+
+			if parameters then
+				local hasLuaTag, final = string.find(string.lower(parameters), "^lua\n+")
+				if hasLuaTag then
+					parameters = string.sub(parameters, final + 1)
+				end
+			end
+		elseif string.find(parameters, "^http") then
+			local header, body = http.request("GET", parameters)
+			parameters = body
+		else
+			parameters = nil
+		end
+
+		if not parameters or #parameters == 0 then
+			toDelete[message.id] = message:reply({
+				content = "<@!" .. message.author.id .. ">",
+				embed = {
+					color = color.fail,
+					title = "<:wheel:456198795768889344> Invalid parameters.",
+					description = "The parameter is not a link or \\`\\`\\`Code\\`\\`\\`."
+				}
+			})
+			return
+		end
+
+		local kb = #parameters / 1000
+
+		local fn, err = load(parameters, '', 't', envTfm)
+		if not fn then
+			toDelete[message.id] = message:reply({
+				content = "<@!" .. message.author.id .. ">",
+				embed = {
+					color = color.error,
+					title = "<:wheel:456198795768889344> Syntax failed.",
+					description = "**Script length** : " .. kb .. "kb\n\n<:dnd:456197711251636235> Script syntax failed\n\n```\n" .. err .. "```"
+				}
+			})
+			return
+		end
+
+		toDelete[message.id] = message:reply({
+			content = "<@!" .. message.author.id .. ">",
+			embed = {
+				color = color.success,
+				title = "<:wheel:456198795768889344> Syntax checked sucessfully.",
+				description = "**Script length** : " .. kb .. "kb\n\n<:online:456197711356755980> Script syntax checked sucessfully"
+			}
+		})
+	end
+}
+commands["form"] = {
+	description = "Displays the application form link.",
+	fn = function(message)
+		toDelete[message.id] = message:reply({
+			content = "<@!" .. message.author.id .. ">",
+			embed = {
+				color = color.info,
+				title = "<:atelier:458403092417740824> Application Form",
+				description = "**Application state** : <:online:456197711356755980>\n\n**URL** : https://goo.gl/ZJcnhZ",
+				timestamp = message.timestamp
+			}
+		})
 	end
 }
 commands["help"] = {
@@ -702,7 +1240,7 @@ commands["help"] = {
 			parameters = string.lower(parameters)
 			
 			parameters = alias[parameters] or parameters
-			if commands[parameters] then
+			if commands[parameters] and not commands[parameters].sys then
 				local aliases, counter = { }, 0
 				for ali, cmd in next, alias do
 					if cmd == parameters then
@@ -735,8 +1273,8 @@ commands["help"] = {
 				embed = {
 					color = color.info,
 					title = ":loudspeaker: General help",
-					description = table.fconcat(commands, "\n", function(index, value)
-						return ":small_" .. (value.highlevel and "orange" or "blue") .. "_diamond: **!" .. index .. "** - " .. value.description
+					description = table.fconcat(commands, "", function(index, value)
+						return value.sys and "" or (":small_" .. (value.highlevel and "orange" or "blue") .. "_diamond: **!" .. index .. "** - " .. value.description .. "\n")
 					end, nil, nil, pairsByIndexes)
 				}
 			})
@@ -805,7 +1343,7 @@ commands["quote"] = {
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
-		local quotedMessage, quotedChannel = string.match(parameters, "(%d+)%-(%d+)")
+		local quotedChannel, quotedMessage = string.match(parameters, "(%d+)%-(%d+)")
 		quotedMessage = quotedMessage or string.match(parameters, "%d+")
 
 		if quotedMessage then
@@ -839,6 +1377,15 @@ commands["quote"] = {
 				end
 			end
 		end
+	end
+}
+commands["refresh"] = {
+	sys = true,
+	fn = function(message)
+		message:delete()
+
+		os.execute("luvit bot.lua")
+		os.exit()
 	end
 }
 commands["reject"] = {
@@ -915,6 +1462,65 @@ commands["terms"] = {
 		toDelete[message.id] = msg
 	end
 }
+commands["update"] = {
+	sys = true,
+	fn = function()
+		updateLayout(true)
+	end
+}
+commands["upload"] = {
+	description = "Uploads an image in module-images.",
+	syntax = "!upload link / image",
+	connection = true,
+	sys = true,
+	fn = function(message, parameters)
+		local img = message.attachment and message.attachment.url
+		if not img then
+			if not hasParam(message, parameters) then return end
+		end
+
+		parameters = img or parameters
+		local extension, formats = false, { ".jpg", ".bmp", ".png", ".jpeg", ".gif" }
+		for f = 1, #formats do
+			if string.find(parameters, formats[f]) then
+				extension = string.sub(formats[f], 2)
+				break
+			end
+		end
+
+		if not img and extension and not string.find(parameters, "^https?://") then
+			extension = false
+		end
+
+		if not extension then
+			toDelete[message.id] = message:reply({
+				content = "<@!" .. message.author.id .. ">",
+				embed = {
+					color = color.fail,
+					title = "<:atelier:458403092417740824> Invalid link",
+					description = "The link provided is not a valid image."
+				}
+			})
+			return
+		end
+
+		local _, image = http.request("GET", parameters)
+		if not image then
+			toDelete[message.id] = message:reply({
+				content = "<@!" .. message.author.id .. ">",
+				embed = {
+					color = color.fail,
+					title = "<:atelier:458403092417740824> Invalid image",
+					description = "The link provided could not be uploaded."
+				}
+			})
+			return
+		end
+
+		local body = forumClient:page(imageHost.host, { }, imageHost.link .. encodeUrl(account.username), nil, attachFile(image, extension))
+		print(body)
+	end
+}
 
 --[[ Events ]]--
 client:on("ready", function()
@@ -941,10 +1547,10 @@ local messageCreate = function(message)
 	if message.channel.type == 1 then return end
 
 	-- Doesn't allow to speak in #announcements
-	if message.channel.id == "190849892158013440" then return end
+	if message.channel.id == channels.announcements then return end
 
 	-- Doesn't allow to speak in another guild (except the one that hosts the bot emojis and stuff)
-	if message.guild.id ~= "190844663660412928" and message.guild.id ~= "399730169000230923" then
+	if message.guild.id ~= channels.guild and message.guild.id ~= "399730169000230923" then
 		return client:leave()
 	end
 
@@ -961,14 +1567,16 @@ local messageCreate = function(message)
 	command = alias[command] or command
 	if commands[command] then
 		if not hasPermission(message.member, (commands[command].highlevel and roles.helper or roles.dev)) then
-			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
-				embed = {
-					color = color.fail,
-					title = "Authorization denied.",
-					description = "You do not have access to the command **!" .. command .. "**!"
-				}
-			})
+			if not commands[command].sys then
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "Authorization denied.",
+						description = "You do not have access to the command **!" .. command .. "**!"
+					}
+				})
+			end
 			return
 		end
 		
@@ -1119,140 +1727,195 @@ client:on("reactionAdd", function(reaction, userId)
 	end
 end)
 
+local memberJoin = function(member)
+	if member.guild.id == channels.guild then
+		client:getChannel(channels.logs):send({
+			embed = {
+				color = color.info,
+				description = "<@!" .. member.id .. "> [" .. member.name .. "] just joined the server!"
+			}
+		})
+	end
+end
+local memberLeave = function(member)
+	if member.guild.id == channels.guild then
+		client:getChannel(channels.logs):send({
+			embed = {
+				color = color.info,
+				description = "<@!" .. member.id .. "> [" .. member.name .. "] just left the server!"
+			}
+		})
+	end
+end
+
+client:on("memberJoin", function(member)
+	local success, err = pcall(memberJoin, member)
+	if not success then
+		message:reply({
+			embed = {
+				color = color.error,
+				title = "evt@MemberJoin => Fatal Error!",
+				description = "```\n" .. err .. "```"
+			}
+		})
+	end
+end)
+client:on("memberLeave", function(member)
+	local success, err = pcall(memberLeave, member)
+	if not success then
+		message:reply({
+			embed = {
+				color = color.error,
+				title = "evt@MemberLeave => Fatal Error!",
+				description = "```\n" .. err .. "```"
+			}
+		})
+	end
+end)
+
+local checkApplications = function()
+	if not forumClient:isConnected() then return end
+
+	local body = forumClient:getPage(section)
+
+	local newApplications, topics, counter, toCheck = { }, { }, 0, { }
+	string.gsub(body, 'href="(%S+)"> +%[MODULE%] +(.-) +</a>.-messages%-(.-)".->(%d+)</a>', function(url, playerName, topicState, totalComments)
+		if topicState == "reponses" or topicState == "nouveau" then
+			local final = string.find(url, "&p")
+			local link = string.sub(url, 1, (final or 0) - 1)
+
+			if not topicState == "nouveau" then -- new app must be #1
+				link = link .. "&p=1#m" .. totalComments
+			end
+
+			counter = counter + 1
+			toCheck[counter] = link
+
+			local bar = {
+				[1] = "https://atelier801.com/" .. link,
+				[2] = playerName
+			}
+			if topicState == "reponses" then
+				local checkedComments = final and tonumber(string.sub(url, final + 6)) or 0
+				bar[3] = totalComments - checkedComments
+				topics[#topics + 1] = bar
+			elseif topicState == "nouveau" then
+				newApplications[#newApplications + 1] = bar
+			end
+		end
+	end)
+
+	if #topics > 0 then
+		client:getChannel(channels.applications):send({ -- #applications
+			embed = {
+				color = color.info,
+				title = "<:atelier:458403092417740824> New comments in applications!",
+				description = table.fconcat(topics, "\n", function(index, value)
+					return ":eye: [**" .. value[2] .. "**](" .. value[1] .. ") - **" .. value[3] .. "** new comment" .. (value[3] > 1 and "s" or "") .. "."
+				end),
+				timestamp = discordia.Date():toISO()
+			}
+		})
+	end
+	if #newApplications > 0 then
+		local announcements = client:getChannel(channels.applications) -- #applications
+		for application = 1, #newApplications do
+			announcements:send({
+				embed = {
+					color = color.info,
+					title = "<:atelier:458403092417740824> New application",
+					description = ":eye: [**" .. newApplications[application][2] .. "**](" .. newApplications[application][1] .. ")",
+					timestamp = discordia.Date():toISO()
+				}
+			})
+		end
+	end
+	if #toCheck > 0 then
+		for page = 1, #toCheck do
+			forumClient:getPage(toCheck[page])
+		end
+	end
+end
+local checkPrivateMessages = function()
+	if not forumClient:isConnected() then return end
+
+	local body = forumClient:getPage("conversations")
+
+	local toCheck, counter = { }, 0
+	string.gsub(body, 'img18 espace%-2%-2" />  (.-) </a>.-nombre%-messages%-(.-)" href="(.-)">(%d+)<', function(title, messageState, url, totalReplies)
+		if messageState == "reponses" or messageState == "nouveau" then
+			local final = string.find(url, "&p")
+			local link = string.sub(url, 1, (final or 0) - 1)
+
+			if not topicState == "nouveau" then -- new msg must be #1
+				link = link .. "&p=1#m" .. totalReplies
+			end
+
+			local checkedReplies = final and tonumber(string.sub(url, final + 6)) or 0
+			counter = counter + 1
+
+			toCheck[counter] = { title, messageState == "nouveau", link, totalReplies - (totalReplies - checkedReplies) + 1, totalReplies }
+		end
+	end)
+
+	if #toCheck > 0 then
+		local channel = client:getChannel(channels.notifications) -- #notifications
+		for topic = 1, #toCheck do
+			local message = forumClient:getPage(toCheck[topic][3])
+
+			counter = 0
+			local replies = { }
+			for reply = toCheck[topic][4], toCheck[topic][5] do
+				local author, discriminator = string.match(message, '<div id="m' .. reply ..'".-alt="">   (%S+)<br/>.-(#%d+)</span>')
+				author = author .. discriminator
+
+				if author ~= account.username then -- Won't notify bot messages
+					local text = string.match(message, '>    #' .. reply .. '   </a>    </td> </tr> <tr> .- <div id="message_%d+">(.-)</div> </div>  </div> </td>')
+
+					counter = counter + 1
+					replies[counter + 1] = { string.sub(removeHtmlFormat(text), 1, 100), normalizeDiscriminator(normalizePlayerName(author)) }
+				end
+			end
+
+			channel:send({
+				embed = {
+					color = color.info,
+					title = (toCheck[topic][2] and ":envelope_with_arrow:" or ":mailbox_with_mail:") .. " " .. toCheck[topic][1],
+					description = "[View conversation](https://atelier801.com/" .. toCheck[topic][3] .. ")\n" .. string.sub(table.fconcat(replies, "\n", function(index, value)
+						return "> " .. value[2] .. " ```\n" .. value[1] .. "```"
+					end), 1, 1900),
+					timestamp = discordia.Date():toISO()
+				}
+			})
+		end
+	end
+end
+
 local minutes = 0
 local clockMin = function()
 	minutes = minutes + 1
 
 	if not forumClient:isConnected() then -- reconnection
 		forumClient:login(account.username, account.password)
+	elseif minutes == 1 then
+		updateLayout()
 	end
 
-	if minutes % 30 == 0 then
+	if minutes == 1 or minutes % 15 == 0 then
+		checkPrivateMessages()
+	end
+	if minutes == 1 or minutes % 20 then
 		local newStatus = table.random(botStatus)
-		client:setStatus(newStatus[1])
 		client:setGame(table.random(newStatus[2]))
-
-		 -- check new pms and answers
-		local body = forumClient:getPage("conversations")
-
-		local toCheck, counter = { }, 0
-		string.gsub(body, 'img18 espace%-2%-2" />  (.-) </a>.-nombre%-messages%-(.-)" href="(.-)">(%d+)<', function(title, messageState, url, totalReplies)
-			if messageState == "reponses" or messageState == "nouveau" then
-				local final = string.find(url, "&p")
-				local link = string.sub(url, 1, (final or 0) - 1)
-
-				if not topicState == "nouveau" then -- new msg must be #1
-					link = link .. "&p=1#m" .. totalReplies
-				end
-
-				local checkedReplies = final and tonumber(string.sub(url, final + 6)) or 0
-				counter = counter + 1
-
-				toCheck[counter] = { title, messageState == "nouveau", link, totalReplies - (totalReplies - checkedReplies) + 1, totalReplies }
-			end
-		end)
-
-		if #toCheck > 0 then
-			local channel = client:getChannel(channels.notifications) -- #notifications
-			for topic = 1, #toCheck do
-				local message = forumClient:getPage(toCheck[topic][3])
-
-				counter = 0
-				local replies = { }
-				for reply = toCheck[topic][4], toCheck[topic][5] do
-					local author, discriminator = string.match(message, '<div id="m' .. reply ..'".-alt="">   (%S+)<br/>.-(#%d+)</span>')
-					author = author .. discriminator
-
-					if author ~= account.username then -- Won't notify bot messages
-						local text = string.match(message, '>    #' .. reply .. '   </a>    </td> </tr> <tr> .- <div id="message_%d+">(.-)</div> </div>  </div> </td>')
-
-						counter = counter + 1
-						replies[counter + 1] = { string.sub(removeHtmlFormat(text), 1, 100), normalizeDiscriminator(normalizePlayerName(author)) }
-					end
-				end
-
-				channel:send({
-					embed = {
-						color = color.info,
-						title = (toCheck[topic][2] and ":envelope_with_arrow:" or ":mailbox_with_mail:") .. " " .. toCheck[topic][1],
-						description = "[View conversation](https://atelier801.com/" .. toCheck[topic][3] .. ")\n" .. string.sub(table.fconcat(replies, "\n", function(index, value)
-							return "> " .. value[2] .. " ```\n" .. value[1] .. "```"
-						end), 1, 1900),
-						timestamp = discordia.Date():toISO()
-					}
-				})
-			end
-		end
+		client:setStatus(newStatus[1])
+	end
+	if minutes == 1 or minutes % 30 == 0 then
+		checkApplications()
 	end
 end
 local clockHour = function()
 	-- Change name once per day
-	if os.date("%H") == "00" then
-		client:getGuild(channels.guild):getMember(client.user.id):setNickname(table.random(botNames))
-		client:setAvatar(botAvatars[moonPhase()])
-	end
-
-	if forumClient:isConnected() then -- new apps and comments
-		local body = forumClient:getPage(section)
-
-		local newApplications, topics, counter, toCheck = { }, { }, 0, { }
-		string.gsub(body, 'href="(%S+)"> +%[MODULE%] +(.-) +</a>.-messages%-(.-)".->(%d+)</a>', function(url, playerName, topicState, totalComments)
-			if topicState == "reponses" or topicState == "nouveau" then
-				local final = string.find(url, "&p")
-				local link = string.sub(url, 1, (final or 0) - 1)
-
-				if not topicState == "nouveau" then -- new app must be #1
-					link = link .. "&p=1#m" .. totalComments
-				end
-
-				counter = counter + 1
-				toCheck[counter] = link
-
-				local bar = {
-					[1] = "https://atelier801.com/" .. link,
-					[2] = playerName
-				}
-				if topicState == "reponses" then
-					local checkedComments = final and tonumber(string.sub(url, final + 6)) or 0
-					bar[3] = totalComments - checkedComments
-					topics[#topics + 1] = bar
-				elseif topicState == "nouveau" then
-					newApplications[#newApplications + 1] = bar
-				end
-			end
-		end)
-
-		if #topics > 0 then
-			client:getChannel(channels.applications):send({ -- #applications
-				embed = {
-					color = color.info,
-					title = "<:atelier:458403092417740824> New comments in applications!",
-					description = table.fconcat(topics, "\n", function(index, value)
-						return ":eye: [**" .. value[2] .. "**](" .. value[1] .. ") - **" .. value[3] .. "** new comment" .. (value[3] > 1 and "s" or "") .. "."
-					end),
-					timestamp = discordia.Date():toISO()
-				}
-			})
-		end
-		if #newApplications > 0 then
-			local announcements = client:getChannel(channels.applications) -- #applications
-			for application = 1, #newApplications do
-				announcements:send({
-					embed = {
-						color = color.info,
-						title = "<:atelier:458403092417740824> New application",
-						description = ":eye: [**" .. newApplications[application][2] .. "**](" .. newApplications[application][1] .. ")",
-						timestamp = discordia.Date():toISO()
-					}
-				})
-			end
-		end
-		if #toCheck > 0 then
-			for page = 1, #toCheck do
-				forumClient:getPage(toCheck[page])
-			end
-		end
-	end
+	updateLayout()
 end
 
 clock:on("min", function()
