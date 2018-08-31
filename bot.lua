@@ -201,7 +201,7 @@ do
 				headers[3] = { "Accept", "application/json, text/javascript, */*; q=0.01" }
 				headers[4] = { "Accept-Language", "en-US,en;q=0.9" }
 				headers[5] = { "X-Requested-With", "XMLHttpRequest" }
-				headers[6] = { "Content-Type", (fileBody and "multi-part/form-data; boundary=" .. boundaries[1] or "application/x-www-form-urlencoded; charset=UTF-8") }
+				headers[6] = { "Content-Type", (fileBody and "multipart/form-data; boundary=" .. boundaries[1] or "application/x-www-form-urlencoded; charset=UTF-8") }
 				headers[7] = { "Referer", "https://atelier801.com/" .. ajax }
 				headers[8] = { "Connection", "keep-alive" }
 			end
@@ -1472,7 +1472,6 @@ commands["upload"] = {
 	description = "Uploads an image in module-images.",
 	syntax = "!upload link / image",
 	connection = true,
-	sys = true,
 	fn = function(message, parameters)
 		local img = message.attachment and message.attachment.url
 		if not img then
@@ -1517,8 +1516,34 @@ commands["upload"] = {
 			return
 		end
 
-		local body = forumClient:page(imageHost.host, { }, imageHost.link .. encodeUrl(account.username), nil, attachFile(image, extension))
-		print(body)
+		local link = imageHost.link .. encodeUrl(account.username)
+		local body = forumClient:page(imageHost.host, { }, link, nil, attachFile(image, extension))
+		if string.sub(body, 3, 13) == "redirection" then
+			local list = forumClient:getPage(link)
+
+			local imageLink, imageId = string.match(list, '"(http://images%.atelier801%.com/(.-))"')
+
+			client:getChannel(channels.flood):send({
+				content = "<@!" .. message.author.id .. ">",
+				embed = {
+					color = color.info,
+					title = "<:atelier:458403092417740824> Image upload",
+					description = "Your image code is **" .. imageId .. "**",
+					thumbnail = { url = imageLink }
+				}
+			})
+		else
+			toDelete[message.id] = client:getChannel(channels.flood):send({
+				content = "<@!" .. message.author.id .. ">",
+				embed = {
+					color = color.fail,
+					title = "<:atelier:458403092417740824> Image upload",
+					description = "Failure trying to upload the image **" .. parameters .. "**"
+				}
+			})
+		end
+
+		message:delete()
 	end
 }
 
