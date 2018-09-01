@@ -1470,15 +1470,63 @@ commands["update"] = {
 }
 commands["upload"] = {
 	description = "Uploads an image in module-images.",
-	syntax = "!upload link / image",
+	syntax = "!upload link / imgur album / image",
 	connection = true,
-	fn = function(message, parameters)
+	fn = function(message, parameters, get)
 		local img = message.attachment and message.attachment.url
 		if not img then
 			if not hasParam(message, parameters) then return end
 		end
 
+		local channel = client:getChannel("482940530511183876")
+
 		parameters = img or parameters
+
+		if string.sub(parameters, 1, 20) == "https://imgur.com/a/" then -- imgur album
+			local header, body = http.request("GET", parameters)
+
+			local images, counter = { }, 0
+			string.gsub(body, '<div id="(%S+)" class="post%-image%-container', function(image)
+				counter = counter + 1
+				images[counter] = image .. ".png"
+			end)
+
+			if counter > 0 then
+				local refMessage
+				for image = 1, counter do
+					local code, failed = commands["upload"].fn(message, "https://i.imgur.com/" .. images[image], true)
+
+					local result = (failed and ("<:dnd:456197711251636235> [**" .. images[image] .. "**](https://i.imgur.com/" .. images[image] .. ")") or ("<:online:456197711356755980> [**" .. images[image] .. "**](https://i.imgur.com/" .. images[image] .. ") ~> [**" .. code .. "**](http://images.atelier801.com/" .. code .. ")"))
+
+					if image == 1 then
+						refMessage = channel:send({
+							content = "<@!" .. message.author.id .. ">",
+							embed = {
+								color = color.success,
+								title = "<:atelier:458403092417740824> Image album upload [ 1 / " .. counter .. " ]",
+								description = result
+							}
+						})
+					else
+						refMessage.embed.title = string.gsub(refMessage.embed.title, "%[ (%d+) /", "[ " .. image .. " /", 1)
+						refMessage.embed.description = refMessage.embed.description .. "\n" .. result
+						refMessage:setEmbed(refMessage.embed)
+					end
+				end
+				message:delete()
+			else
+				toDelete[message.id] = channel:send({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "<:imgur:485536726794764299> Invalid imgur album",
+						description = "The link provided is not a valid imgur album.\n```\n" .. parameters .. "```"
+					}
+				})
+			end		
+			return
+		end
+
 		local extension, formats = false, { ".jpg", ".bmp", ".png", ".jpeg", ".gif" }
 		for f = 1, #formats do
 			if string.find(parameters, formats[f]) then
@@ -1492,12 +1540,12 @@ commands["upload"] = {
 		end
 
 		if not extension then
-			toDelete[message.id] = message:reply({
+			toDelete[message.id] = channel:send({
 				content = "<@!" .. message.author.id .. ">",
 				embed = {
 					color = color.fail,
 					title = "<:atelier:458403092417740824> Invalid link",
-					description = "The link provided is not a valid image."
+					description = "The link provided is not a valid image.\n```\n" .. parameters .. "```"
 				}
 			})
 			return
@@ -1505,12 +1553,12 @@ commands["upload"] = {
 
 		local _, image = http.request("GET", parameters)
 		if not image then
-			toDelete[message.id] = message:reply({
+			toDelete[message.id] = channel:send({
 				content = "<@!" .. message.author.id .. ">",
 				embed = {
 					color = color.fail,
 					title = "<:atelier:458403092417740824> Invalid image",
-					description = "The link provided could not be uploaded."
+					description = "The link provided could not be uploaded.\n```\n" .. parameters .. "```"
 				}
 			})
 			return
@@ -1523,24 +1571,32 @@ commands["upload"] = {
 
 			local imageLink, imageId = string.match(list, '"(http://images%.atelier801%.com/(.-))"')
 
-			client:getChannel(channels.flood):send({
-				content = "<@!" .. message.author.id .. ">",
-				embed = {
-					color = color.info,
-					title = "<:atelier:458403092417740824> Image upload",
-					description = "Your image code is **" .. imageId .. "**",
-					thumbnail = { url = imageLink }
-				}
-			})
+			if get then
+				return imageId
+			else
+				channel:send({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.info,
+						title = "<:atelier:458403092417740824> Image upload",
+						description = "Your image code is [**" .. imageId .. "**](" .. imageLink .. ")",
+						image = { url = imageLink }
+					}
+				})
+			end
 		else
-			toDelete[message.id] = client:getChannel(channels.flood):send({
-				content = "<@!" .. message.author.id .. ">",
-				embed = {
-					color = color.fail,
-					title = "<:atelier:458403092417740824> Image upload",
-					description = "Failure trying to upload the image **" .. parameters .. "**"
-				}
-			})
+			if get then
+				return parameters, true
+			else
+				toDelete[message.id] = channel:send({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "<:atelier:458403092417740824> Image upload",
+						description = "Failure trying to upload the image **" .. parameters .. "**\n```\n" .. tostring(body) .. "```"
+					}
+				})
+			end
 		end
 
 		message:delete()
