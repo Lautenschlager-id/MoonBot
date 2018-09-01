@@ -1519,6 +1519,8 @@ commands["upload"] = {
 						refMessage:setEmbed(refMessage.embed)
 					end
 				end
+
+				message.author:send({ embed = refMessage.embed })
 				message:delete()
 			else
 				toDelete[message.id] = channel:send({
@@ -1580,7 +1582,7 @@ commands["upload"] = {
 			if get then
 				return imageId
 			else
-				channel:send({
+				local msg = channel:send({
 					content = "<@!" .. message.author.id .. ">",
 					embed = {
 						color = color.info,
@@ -1589,6 +1591,7 @@ commands["upload"] = {
 						image = { url = imageLink }
 					}
 				})
+				message.author:send({ embed = msg.embed })
 			end
 		else
 			if get then
