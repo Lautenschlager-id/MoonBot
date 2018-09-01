@@ -1492,18 +1492,22 @@ commands["upload"] = {
 			end)
 
 			if counter > 0 then
-				local refMessage
-				for image = 1, counter do
+				local len, refMessage = (counter <= 13 and 0 or counter <= 23 and 1 or 2)
+				for image = 1, math.min(counter, 50) do
 					local code, failed = commands["upload"].fn(message, "https://i.imgur.com/" .. images[image], true)
 
-					local result = (failed and ("<:dnd:456197711251636235> [**" .. images[image] .. "**](https://i.imgur.com/" .. images[image] .. ")") or ("<:online:456197711356755980> [**" .. images[image] .. "**](https://i.imgur.com/" .. images[image] .. ") ~> [**" .. code .. "**](http://images.atelier801.com/" .. code .. ")"))
+					local imgurMarkdown, atelierMarkdown = "**" .. images[image] .. "**", "**" .. code .. "**"
+					imgurMarkdown = (len == 2 and imgurMarkdown or ("[" .. imgurMarkdown .. "](https://i.imgur.com/" .. images[image] .. ")"))
+					atelierMarkdown = (len == 2 and atelierMarkdown or ("[" .. atelierMarkdown .. "](http://images.atelier801.com/" .. code .. ")"))
+
+					local result = (failed and ((len == 0 and "<:dnd:456197711251636235>" or ":x:") .. imgurMarkdown) or ((len == 0 and "<:online:456197711356755980> " or "") .. imgurMarkdown .. " ~> " .. atelierMarkdown))
 
 					if image == 1 then
 						refMessage = channel:send({
 							content = "<@!" .. message.author.id .. ">",
 							embed = {
 								color = color.success,
-								title = "<:atelier:458403092417740824> Image album upload [ 1 / " .. counter .. " ]",
+								title = (len > 0 and ":warning: " or "") .. "<:atelier:458403092417740824> Image album upload [ 1 / " .. counter .. " ]",
 								description = result
 							}
 						})
