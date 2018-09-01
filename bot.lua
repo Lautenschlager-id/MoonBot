@@ -1464,8 +1464,10 @@ commands["terms"] = {
 }
 commands["update"] = {
 	sys = true,
-	fn = function()
+	fn = function(message)
 		updateLayout(true)
+
+		message:delete()
 	end
 }
 commands["upload"] = {
@@ -1478,7 +1480,7 @@ commands["upload"] = {
 			if not hasParam(message, parameters) then return end
 		end
 
-		local channel = client:getChannel("482940530511183876")
+		local channel = client:getChannel(channels.flood)
 
 		parameters = img or parameters
 
