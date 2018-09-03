@@ -267,8 +267,11 @@ local messages = {
 	terms = os.readFile("Info/Others/terms", "*a"),
 	rejected = os.readFile("Info/Others/reject", "*a")
 }
-local section = os.readFile("Info/Forum/section", "*l")
-local ajaxList = os.readFile("Info/Forum/members", "*l")
+local locales = {
+	section = os.readFile("Info/Forum/section", "*l"),
+	ajaxList = os.readFile("Info/Forum/members", "*l"),
+	roomList = os.readFile("Info/Forum/modules", "*l")
+} 
 local imageHost = {
 	link = os.readFile("Info/Forum/image-ajax", "*l"),
 	host = os.readFile("Info/Forum/image", "*l")
@@ -306,6 +309,20 @@ local color = {
 	fail = 0x9C3AAF,
 	success = 0xCC0000,
 	info = 0x3391B1
+}
+
+local communities = {
+	["br"] = "\xF0\x9F\x87\xA7\xF0\x9F\x87\xB7",
+	["es"] = "\xF0\x9F\x87\xAA\xF0\x9F\x87\xB8",
+	["fr"] = "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7",
+	["gb"] = "\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7",
+	["nl"] = "\xF0\x9F\x87\xB3\xF0\x9F\x87\xB1",
+	["ru"] = "\xF0\x9F\x87\xB7\xF0\x9F\x87\xBA",
+	["sa"] = "\xF0\x9F\x87\xB8\xF0\x9F\x87\xA6",
+	["tr"] = "\xF0\x9F\x87\xB9\xF0\x9F\x87\xB7",
+	["pt"] = "br",
+	["en"] = "gb",
+	["ar"] = "sa",
 }
 
 local toDelete = setmetatable({}, {
@@ -790,8 +807,9 @@ local normalizePlayerName = function(playerName)
 	return (string.gsub(string.lower(playerName), "%a", string.upper, 1))
 end
 
-local normalizeDiscriminator = function(discriminator)
-	return discriminator == "#0000" and "" or "`" .. discriminator .. "`"
+local normalizeDiscriminator
+normalizeDiscriminator = function(discriminator)
+	return #discriminator > 5 and (string.gsub(discriminator, "#%d%d%d%d", normalizeDiscriminator, 1)) or (discriminator == "#0000" and "" or "`" .. discriminator .. "`")
 end
 
 local playerExists = function(playerName)
@@ -802,7 +820,7 @@ local playerExists = function(playerName)
 end
 
 local applicationExists = function(playerName)
-	return not not string.find(forumClient:getPage(section), "%[MODULE%] " .. playerName)
+	return not not string.find(forumClient:getPage(locales.section), "%[MODULE%] " .. playerName)
 end
 
 local htmlToMarkdown = function(str)
@@ -895,7 +913,8 @@ local alias = {
 	["deny"] = "reject",
 	['m'] = "members",
 	['i'] = "upload",
-	["img"] = "upload"
+	["img"] = "upload",
+	["rooms"] = "modules"
 }
 
 -- description => Description of the command, appears in !help
@@ -997,7 +1016,7 @@ commands["apps"] = {
 	description = "Counts the current number of applications and gives an approximate counter of votes.",
 	connection = true,
 	fn = function(message)
-		local body = forumClient:getPage(section)
+		local body = forumClient:getPage(locales.section)
 
 		local applications, counter = { }, 0
 		string.gsub(body, 'href="((topic%?f=6&t=%d+)&p=1#m%d+)"> +%[MODULE%] +(.-) +</a>', function(current_url, init_url, playerName)
@@ -1286,17 +1305,17 @@ commands["members"] = {
 	syntax = "!members [pattern]",
 	connection = true,
 	fn = function(message, parameters)
-		local body = forumClient:getPage(ajaxList)
+		local body = forumClient:getPage(locales.ajaxList)
 
 		if parameters then
-			local _, err = pcall(string.find, body, parameters)
-			if err then
+			local success, err = pcall(string.find, body, parameters)
+			if not success then
 				toDelete[message.id] = message:reply({
 					content = "<@!" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = "<:atelier:458403092417740824> Invalid pattern in '!members'.",
-						description = "```\n" .. err .. "```"
+						description = "```\n" .. tostring(err) .. "```"
 					}
 				})
 				return
@@ -1334,6 +1353,109 @@ commands["members"] = {
 					description = ":small_blue_diamond:" .. table.concat(list, "\n:small_blue_diamond:")
 				}
 			})
+		end
+	end
+}
+commands["modules"] = {
+	description = "Lists the current modules available in Transformice.",
+	syntax = "!modules [[from Community / by Player] [is ModuleLevel(0=semi / 1=official)] [pattern]]",
+	connection = true,
+	fn = function(message, parameters)
+		local body = forumClient:getPage(locales.roomList)
+
+		local search, pattern = {
+			commu = false,
+			player = false,
+			type = false
+		}
+		if parameters then
+			local success, err = pcall(string.find, body, parameters)
+			if not success then
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "<:atelier:458403092417740824> Invalid pattern in '!modules'.",
+						description = "```\n" .. tostring(err) .. "```"
+					}
+				})
+				return
+			end
+
+			string.gsub(string.lower(parameters), "(%S+)[\n ]+(%S+)", function(keyword, value)
+				if keyword then
+					if keyword == "from" and not search.player then
+						if #value == 2 then
+							search.commu = #tostring(communities[value]) == 2 and communities[value] or value
+						else
+							search.commu = table.search(communities, value)
+						end
+					elseif keyword == "by" and not search.commu then
+						search.player = value
+					elseif keyword == "is" then
+						if tonumber(value) then
+							search.type = value
+						end
+					end
+				end
+			end)
+			pattern = string.match(" " .. parameters, "[\n ]+#(.+)$")
+		end
+		
+		local list, counter = { }, 0
+
+		string.gsub(body, '<tr><td><img src="https://atelier801%.com/img/pays/(..)%.png" alt="https://atelier801%.com/img/pays/%1%.png" class="inline%-block img%-ext" style="float:;" /></td><td>     </td><td>(#[^<]+).-</td><td>     </td><td>(%S+)</td><td>     </td><td>(%S+)</td> 	</tr>', function(community, module, level, hoster)
+			local check = (not parameters or parameters == "")
+			if not check then
+				check = true
+
+				if search.commu then
+					check = community == search.commu
+				end
+				if search.type then
+					check = check and ((search.type == '0' and level == "semi-official") or (search.type == '1' and level == "official"))
+				end
+				if search.player then
+					check = check and not not string.find(string.lower(hoster), search.player)
+				end
+				if pattern then
+					check = check and not not string.find(module, pattern)
+				end
+			end
+
+			if check then
+				counter = counter + 1
+				list[counter] = { community, module, level, normalizeDiscriminator(hoster) }
+			end
+		end)
+
+		if #list == 0 then
+			toDelete[message.id] = message:reply({
+				content = "<@!" .. message.author.id .. ">",
+				embed = {
+					color = color.fail,
+					title = "<:wheel:456198795768889344> Modules",
+					description = "There are not modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == '0' and "semi-official" or "official") .. "]") or "") .. (pattern and (" with the pattern **`" .. tostring(pattern) .. "`**.") or ".")
+				}
+			})
+		else
+			local out = table.fconcat(list, "\n", function(index, value)
+				return communities[value[1]] .. " `" .. value[3] .. "` **" .. value[2] .. "** ~> **" .. value[4] .. "**"
+			end)
+
+			local lines, msgs = splitByLine(out), { }
+			for line = 1, #lines do
+				msgs[line] =  message:reply({
+					content = (line == 1 and "<@!" .. message.author.id .. ">" or nil),
+					embed = {
+						color = color.info,
+						title = (line == 1 and "<:wheel:456198795768889344> [" .. #list .. "] Modules found" or nil),
+						description = lines[line]
+					}
+				})
+			end
+
+			toDelete[message.id] = msgs
 		end
 	end
 }
@@ -1866,7 +1988,7 @@ end)
 local checkApplications = function()
 	if not forumClient:isConnected() then return end
 
-	local body = forumClient:getPage(section)
+	local body = forumClient:getPage(locales.section)
 
 	local newApplications, topics, counter, toCheck = { }, { }, 0, { }
 	string.gsub(body, 'href="(%S+)"> +%[MODULE%] +(.-) +</a>.-messages%-(.-)".->(%d+)</a>', function(url, playerName, topicState, totalComments)
