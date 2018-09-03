@@ -1385,17 +1385,16 @@ commands["modules"] = {
 			string.gsub(string.lower(parameters), "(%S+)[\n ]+(%S+)", function(keyword, value)
 				if keyword then
 					if keyword == "from" and not search.player then
+						search.commu = tonumber(value)
 						if #value == 2 then
 							search.commu = #tostring(communities[value]) == 2 and communities[value] or value
 						else
-							search.commu = table.search(communities, value)
+							search.commu = table.search(communities, value) or value
 						end
 					elseif keyword == "by" and not search.commu then
 						search.player = value
 					elseif keyword == "is" then
-						if tonumber(value) then
-							search.type = value
-						end
+						search.type = tonumber(value)
 					end
 				end
 			end)
@@ -1413,7 +1412,7 @@ commands["modules"] = {
 					check = community == search.commu
 				end
 				if search.type then
-					check = check and ((search.type == '0' and level == "semi-official") or (search.type == '1' and level == "official"))
+					check = check and ((search.type == 0 and level == "semi-official") or (search.type == 1 and level == "official"))
 				end
 				if search.player then
 					check = check and not not string.find(string.lower(hoster), search.player)
@@ -1435,7 +1434,7 @@ commands["modules"] = {
 				embed = {
 					color = color.fail,
 					title = "<:wheel:456198795768889344> Modules",
-					description = "There are not modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == '0' and "semi-official" or "official") .. "]") or "") .. (pattern and (" with the pattern **`" .. tostring(pattern) .. "`**.") or ".")
+					description = "There are not modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == 0 and "semi-official" or "official") .. "]") or "") .. (pattern and (" with the pattern **`" .. tostring(pattern) .. "`**.") or ".")
 				}
 			})
 		else
