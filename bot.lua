@@ -906,6 +906,22 @@ local hasParam = function(message, parameters)
 	return true
 end
 
+local validPattern = function(message, src, pattern)
+	local success, err = pcall(string.find, src, pattern)
+	if not success then
+		toDelete[message.id] = message:reply({
+			content = "<@!" .. message.author.id .. ">",
+			embed = {
+				color = color.fail,
+				title = "<:atelier:458403092417740824> Invalid pattern.",
+				description = "```\n" .. tostring(err) .. "```"
+			}
+		})
+		return false
+	end
+	return true
+end
+
 local alias = {
 	-- alias, cmd
 	["accept"] = "terms",
@@ -1307,21 +1323,8 @@ commands["members"] = {
 	fn = function(message, parameters)
 		local body = forumClient:getPage(locales.ajaxList)
 
-		if parameters then
-			local success, err = pcall(string.find, body, parameters)
-			if not success then
-				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
-					embed = {
-						color = color.fail,
-						title = "<:atelier:458403092417740824> Invalid pattern in '!members'.",
-						description = "```\n" .. tostring(err) .. "```"
-					}
-				})
-				return
-			end
-		end
-		
+		if parameters and not validPattern(message, body, parameters) then return end
+
 		local list, counter = { }, 0
 		string.gsub(body, '(%S+)<span class="font%-s couleur%-hashtag%-pseudo"> (#%d+)</span>', function(nickname, discriminator)
 			nickname = nickname .. discriminator
@@ -1370,18 +1373,7 @@ commands["modules"] = {
 			pattern = false
 		}
 		if parameters then
-			local success, err = pcall(string.find, body, parameters)
-			if not success then
-				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
-					embed = {
-						color = color.fail,
-						title = "<:atelier:458403092417740824> Invalid pattern in '!modules'.",
-						description = "```\n" .. tostring(err) .. "```"
-					}
-				})
-				return
-			end
+			if not validPattern(message, body, parameters) then return end
 
 			string.gsub(string.lower(parameters), "(%S+)[\n ]+(%S+)", function(keyword, value)
 				if keyword then
@@ -1393,6 +1385,7 @@ commands["modules"] = {
 							search.commu = table.search(communities, value) or value
 						end
 					elseif keyword == "by" and not search.commu then
+						if not validPattern(message, body, value) then return end
 						search.player = value
 					elseif keyword == "level" then
 						search.type = tonumber(value)
@@ -2049,6 +2042,7 @@ local checkApplications = function()
 	end
 end
 local checkPrivateMessages = function()
+	do return end
 	if not forumClient:isConnected() then return end
 
 	local body = forumClient:getPage("conversations")
