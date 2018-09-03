@@ -1358,15 +1358,16 @@ commands["members"] = {
 }
 commands["modules"] = {
 	description = "Lists the current modules available in Transformice.",
-	syntax = "!modules [[from Community / by Player] [is ModuleLevel(0=semi / 1=official)] [pattern]]",
+	syntax = "!modules [[from Community / by Player] [level ModuleLevel(0=semi / 1=official)] [#pattern]]",
 	connection = true,
 	fn = function(message, parameters)
 		local body = forumClient:getPage(locales.roomList)
 
-		local search, pattern = {
+		local search = {
 			commu = false,
 			player = false,
-			type = false
+			type = false,
+			pattern = false
 		}
 		if parameters then
 			local success, err = pcall(string.find, body, parameters)
@@ -1393,12 +1394,12 @@ commands["modules"] = {
 						end
 					elseif keyword == "by" and not search.commu then
 						search.player = value
-					elseif keyword == "is" then
+					elseif keyword == "level" then
 						search.type = tonumber(value)
 					end
 				end
 			end)
-			pattern = string.match(" " .. parameters, "[\n ]+#(.+)$")
+			search.pattern = string.match(" " .. parameters, "[\n ]+#(.+)$")
 		end
 		
 		local list, counter = { }, 0
@@ -1417,8 +1418,8 @@ commands["modules"] = {
 				if search.player then
 					check = check and not not string.find(string.lower(hoster), search.player)
 				end
-				if pattern then
-					check = check and not not string.find(module, pattern)
+				if search.pattern then
+					check = check and not not string.find(module, search.pattern)
 				end
 			end
 
@@ -1434,7 +1435,7 @@ commands["modules"] = {
 				embed = {
 					color = color.fail,
 					title = "<:wheel:456198795768889344> Modules",
-					description = "There are not modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == 0 and "semi-official" or "official") .. "]") or "") .. (pattern and (" with the pattern **`" .. tostring(pattern) .. "`**.") or ".")
+					description = "There are not modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == 0 and "semi-official" or "official") .. "]") or "") .. (search.pattern and (" with the pattern **`" .. tostring(search.pattern) .. "`**.") or ".")
 				}
 			})
 		else
