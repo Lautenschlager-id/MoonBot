@@ -1087,7 +1087,7 @@ commands["apps"] = {
 				embed = {
 					color = color.info,
 					title = "<:atelier:458403092417740824>  Applications",
-					description = "There are not applications. :("
+					description = "there are no applications. :("
 				}
 			})
 		else
@@ -1341,7 +1341,7 @@ commands["members"] = {
 				embed = {
 					color = color.info,
 					title = "<:lua:483421987499147292> Module Team Members",
-					description = "There are not members with that pattern. :("
+					description = "there are no members with that pattern. :("
 				}
 			})
 		else
@@ -1397,7 +1397,7 @@ commands["modules"] = {
 		
 		local list, counter = { }, 0
 
-		string.gsub(body, '<tr><td><img src="https://atelier801%.com/img/pays/(..)%.png" alt="https://atelier801%.com/img/pays/%1%.png" class="inline%-block img%-ext" style="float:;" /></td><td>     </td><td>(#[^<]+).-</td><td>     </td><td>(%S+)</td><td>     </td><td>(%S+)</td> 	</tr>', function(community, module, level, hoster)
+		string.gsub(body, '<tr><td><img src="https://atelier801%.com/img/pays/(..)%.png" alt="https://atelier801%.com/img/pays/%1%.png" class="inline%-block img%-ext" style="float:;" /></td><td>     </td><td><span .->(#%S+)</span>.-</td><td>     </td><td><span .->(%S+)</span></td><td>     </td><td><span .->(%S+)</span></td> 	</tr>', function(community, module, level, hoster)
 			local check = (not parameters or parameters == "")
 			if not check then
 				check = true
@@ -1428,7 +1428,7 @@ commands["modules"] = {
 				embed = {
 					color = color.fail,
 					title = "<:wheel:456198795768889344> Modules",
-					description = "There are not modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == 0 and "semi-official" or "official") .. "]") or "") .. (search.pattern and (" with the pattern **`" .. tostring(search.pattern) .. "`**.") or ".")
+					description = "there are no modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == 0 and "semi-official" or "official") .. "]") or "") .. (search.pattern and (" with the pattern **`" .. tostring(search.pattern) .. "`**.") or ".")
 				}
 			})
 		else
