@@ -221,11 +221,11 @@ do
 		end
 
 		self.sendPrivateMessage = function(self, to, subject, message)
-			local body = self.page(self, "create-dialog", {
-				{ "destinataire", to },
+			local body = self.page(self, "create-discussion", {
+				{ "destinataires", to .. "§#§Shamousey#0015" },
 				{ "objet", subject },
 				{ "message", message }
-			}, "new-dialog")
+			}, "new-discussion")
 
 			return body
 		end
@@ -881,8 +881,8 @@ local removeHtmlFormat = function(str)
 	str = string.gsub(str, "&#(%d+)", function(dec) return string.char(dec) end)
 	str = string.gsub(str, '<span style=".-;">(.-)</span>', "%1")
 	str = string.gsub(str, '<p style="text-align:.-;">(.-)</p>', "%1")
-	str = string.gsub(str, '<blockquote.-><small>(.-)</small></blockquote>', function(content)
-		return "[" .. (#content > 10 and string.sub(content, 1, 10) .. "..." or content) .. "]"
+	str = string.gsub(str, '<blockquote .-><small>(%S+).-</small><div>(.-)</div></blockquote>', function(from, content)
+		return from .. ": [" .. (#content > 10 and string.sub(content, 1, 10) .. "..." or content) .. "]"
 	end)
 	str = string.gsub(str, '<div class="cadre cadre%-code"><div class="indication%-langage%-code">(.-)</div><hr/>.-<pre .-</pre></div></div>', function(lang)
 		return "'" .. lang .. "' => ..."
@@ -1095,7 +1095,7 @@ commands["apps"] = {
 				end
 
 				if line == #lines then
-					data.embed.footer = { text = "Last updated in" }
+					data.embed.footer = { text = "Last update" }
 					data.embed.timestamp = cachedApplications.timestamp
 				end
 
@@ -1112,6 +1112,16 @@ commands["apps"] = {
 				}
 			})
 		end
+	end
+}
+commands["del"] = {
+	sys = true,
+	fn = function(message, parameters)
+		local msg = message.channel:getMessage(parameters)
+		if msg and msg.author.id == client.user.id then
+			msg:delete()
+		end
+		message:delete()
 	end
 }
 commands["doc"] = {
@@ -2166,7 +2176,6 @@ local checkApplications = function()
 	}) or nil)
 end
 local checkPrivateMessages = function()
-	do return end
 	if not forumClient:isConnected() then return end
 
 	local body = forumClient:getPage("conversations")
@@ -2196,27 +2205,33 @@ local checkPrivateMessages = function()
 			counter = 0
 			local replies = { }
 			for reply = toCheck[topic][4], toCheck[topic][5] do
-				local author, discriminator = string.match(message, '<div id="m' .. reply ..'".-alt="">   (%S+)<br/>.-(#%d+)</span>')
-				author = author .. discriminator
+				-- Conversation
+				local author, discriminator = string.match(message, '<div id="m' .. reply ..'".-alt="">%s+(%S+)<br/>.-(#%d+)</span>')
 
-				if author ~= account.username then -- Won't notify bot messages
-					local text = string.match(message, '>    #' .. reply .. '   </a>    </td> </tr> <tr> .- <div id="message_%d+">(.-)</div> </div>  </div> </td>')
+				if author then -- Sometimes it does not find the author. (???)
+					author = author .. discriminator
 
-					counter = counter + 1
-					replies[counter + 1] = { string.sub(removeHtmlFormat(text), 1, 100), normalizeDiscriminator(normalizePlayerName(author)) }
+					if author ~= account.username then -- Won't notify bot messages
+						local text = string.match(message, '>    #' .. reply .. '   </a>    </td> </tr> <tr> .- <div id="message_%d+">(.-)</div> </div>  </div> </td>')
+
+						counter = counter + 1
+						replies[counter + 1] = { string.sub(removeHtmlFormat(text), 1, 100), normalizeDiscriminator(normalizePlayerName(author)) }
+					end
 				end
 			end
 
-			channel:send({
-				embed = {
-					color = color.info,
-					title = (toCheck[topic][2] and ":envelope_with_arrow:" or ":mailbox_with_mail:") .. " " .. toCheck[topic][1],
-					description = "[View conversation](https://atelier801.com/" .. toCheck[topic][3] .. ")\n" .. string.sub(table.fconcat(replies, "\n", function(index, value)
-						return "> " .. value[2] .. " ```\n" .. value[1] .. "```"
-					end), 1, 1900),
-					timestamp = discordia.Date():toISO()
-				}
-			})
+			if #replies > 0 then -- there must be replies, otherwise the PM was created by the bot
+				channel:send({
+					embed = {
+						color = color.info,
+						title = (toCheck[topic][2] and ":envelope_with_arrow:" or ":mailbox_with_mail:") .. " " .. toCheck[topic][1],
+						description = "[View conversation](https://atelier801.com/" .. toCheck[topic][3] .. ")\n" .. string.sub(table.fconcat(replies, "\n", function(index, value)
+							return "> " .. value[2] .. " ```\n" .. value[1] .. "```"
+						end), 1, 1900),
+						timestamp = discordia.Date():toISO()
+					}
+				})
+			end
 		end
 	end
 end
