@@ -277,6 +277,8 @@ local imageHost = {
 	host = os.readFile("Info/Forum/image", "*l")
 }
 
+local prefix = '!'
+
 local channels = {
 	guild = os.readFile("Info/Channel/guild", "*l"),
 	announcements = os.readFile("Info/Channel/announcements", "*l"),
@@ -297,6 +299,29 @@ local botStatus = {
 	{ "online", { "I'm ready to be used!", "Yoohoo", "LUA or Phyton, that's the question", ":jerry:", "Ping @Pikashu", "Atelier801 Forums" } },
 	{ "idle", { "Waiting Pikashu to update the API", "Waiting my Java application to compile", "Pong @Streaxx", "Editing TFM API", "Checking the moon" } },
 	{ "dnd", { "Taking shower BRB", "I am stressed, do /moon", "My disk is almost full", "Reading applications", "Marriage proposal to Sharpiebot" } }
+}
+
+local greetings = {
+	"Hello, sunshine!",
+	"Howdy, partner!",
+	"What's kickin', little chicken?",
+	"Howdy-doody!",
+	"Hey there, freshman!",
+	"Hi, mister!",
+	"I come in peace!",
+	"Ahoy, matey!",
+	"Hiya!",
+	"I'm Batman.",
+	"Ghostbusters, whatya want?",
+	"Yo!",
+	"Whaddup.",
+	"Greetings and salutations!",
+	"I like your face.",
+	"What's cookin', good lookin'?",
+	"Hey hot stuff",
+	"OMG it's you!! kan i get your autografph?!",
+	"Well hello, I didn't see you there..",
+	"I've been expecting you, Mr Bond..."
 }
 
 local reactions = {
@@ -890,6 +915,8 @@ local attachFile = function(fileData, fileExtension)
 	return table.concat(out, "\r\n")
 end
 
+local cachedApplications
+
 --[[ Commands ]]--
 local hasParam = function(message, parameters)
 	if not parameters or #parameters == 0 then
@@ -942,7 +969,7 @@ local alias = {
 -- fn(msg, param) => The function
 commands["adoc"] = {
 	description = "Gets information about a specific tfm api function.",
-	syntax = "!adoc function_name",
+	syntax = prefix .. "adoc function_name",
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
@@ -1034,67 +1061,8 @@ commands["apps"] = {
 	description = "Counts the current number of applications and gives an approximate counter of votes.",
 	connection = true,
 	fn = function(message)
-		local body = forumClient:getPage(locales.section)
-
-		local applications, counter = { }, 0
-		string.gsub(body, 'href="((topic%?f=6&t=%d+)&p=1#m%d+)"> +%[MODULE%] +(.-) +</a>', function(current_url, init_url, playerName)
-			counter = counter + 1
-			applications[counter] = { current_url, init_url, playerName }
-		end)
-		
-		counter = 0
-		local list = { }
-		local new, yeses, nos, unknowns
-
-		for application = 1, #applications do
-			local topic = forumClient:getPage(applications[application][2])
-
-			new, yeses, nos, unknowns = false, 0, 0, 0
-			if topic then
-				if string.find(applications[application][1], "m1$") then new = true end -- 1 comment
-
-				local first = true
-				string.gsub(topic, '<div id="message_%d+">(.-)</div>', function(comment)
-					if first then
-						first = false
-					else
-						comment = " " .. string.lower(comment) .. " "
-						local yes = string.find(comment, "[%W]yes[%W]")
-						local no = string.find(comment, "[%W]no[%W]")
-
-						if yes and not no then
-							yeses = yeses + 1
-						elseif no and not yes then
-							nos = nos + 1
-						else
-							unknowns = unknowns + 1
-						end
-					end
-				end)
-			end
-
-			counter = counter + 1
-			list[counter] = {
-				url = applications[application][2],
-				playerName = applications[application][3],
-				y = yeses,
-				n = nos,
-				unkn = unknowns,
-				isNew = new
-			}
-		end
-
-		if #list == 0 then
-			toDelete[message.id] = message:reply({
-				embed = {
-					color = color.info,
-					title = "<:atelier:458403092417740824>  Applications",
-					description = "there are no applications. :("
-				}
-			})
-		else
-			-- Split list by line because it may be bigger than 2000 characters
-			local lines = splitByLine(table.fconcat(list, "\n", function(index, value)
+		if cachedApplications then
+			local lines = splitByLine(table.fconcat(cachedApplications.data, "\n", function(index, value)
 				local votes = {
 					value.y > 0 and ("**" .. value.y .. "** Yes" .. (value.y > 1 and "es" or "")) or nil,
 					value.n > 0 and ("**" .. value.n .. "** No" .. (value.n > 1 and "s" or "")) or nil,
@@ -1114,24 +1082,41 @@ commands["apps"] = {
 
 			local msgs = { }
 			for line = 1, #lines do
-				msgs[line] = message:reply({
-					content = "__Yes and No votes are approximated!\nDo not judge before checking the application.__",
+				local data = {
 					embed = {
 						color = color.info,
-						title = (line == 1 and "<:atelier:458403092417740824> Applications [" .. #list .. "]" or nil),
-						description = lines[line],
-						timestamp = string.gsub(message.timestamp, " ", "") -- gsub avoid Discordia glitches
+						description = lines[line]
 					}
-				})
+				}
+
+				if line == 1 then
+					data.content = "__Yes and No votes are approximated!\nDo not judge before checking the application.__"
+					data.embed.title = "<:atelier:458403092417740824> Applications [" .. #cachedApplications.data .. "]"
+				end
+
+				if line == #lines then
+					data.embed.footer = { text = "Last updated in" }
+					data.embed.timestamp = cachedApplications.timestamp
+				end
+
+				msgs[line] = message:reply(data)
 			end
 
 			toDelete[message.id] = msgs
+		else
+			toDelete[message.id] = message:reply({
+				embed = {
+					color = color.fail,
+					title = "<:atelier:458403092417740824> Applications",
+					description = "There are no applications. :("
+				}
+			})
 		end
 	end
 }
 commands["doc"] = {
 	description = "Gets information about a specific lua function.",
-	syntax = "!doc function_name",
+	syntax = prefix .. "doc function_name",
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
@@ -1197,7 +1182,7 @@ commands["doc"] = {
 }
 commands["eval"] = {
 	description = "Checks if the provided code would run in Transformice or not.",
-	syntax = "!eval link / \\`\\`\\`Code\\`\\`\\`",
+	syntax = prefix .. "eval link / \\`\\`\\`Code\\`\\`\\`",
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
@@ -1271,7 +1256,7 @@ commands["form"] = {
 }
 commands["help"] = {
 	description = "Displays the help message.",
-	syntax = "!help or !help command",
+	syntax = prefix .. "help [command]",
 	fn = function(message, parameters)
 		if parameters and #parameters > 0 then
 			parameters = string.lower(parameters)
@@ -1290,8 +1275,8 @@ commands["help"] = {
 					content = "<@!" .. message.author.id .. ">",
 					embed = {
 						color = color.info,
-						title = ":loudspeaker: Help ~> '!" .. parameters .. "'",
-						description = "**Must be connected on forums:** " .. string.upper(tostring(not not commands[parameters].connection)) .. "\n**Helper command:** " .. string.upper(tostring(not not commands[parameters].highlevel)) .. "\n\n**Description:** " .. commands[parameters].description .. (commands[parameters].syntax and ("\n\n**Syntax:** " .. commands[parameters].syntax) or "") .. (#aliases > 0 and ("\n\n**Aliases:** _!" .. table.concat(aliases, "_ , _!") .. "_") or "")
+						title = ":loudspeaker: Help ~> '" .. prefix .. parameters .. "'",
+						description = "**Must be connected on forums:** " .. string.upper(tostring(not not commands[parameters].connection)) .. "\n**Helper command:** " .. string.upper(tostring(not not commands[parameters].highlevel)) .. "\n\n**Description:** " .. commands[parameters].description .. (commands[parameters].syntax and ("\n\n**Syntax:** " .. commands[parameters].syntax) or "") .. (#aliases > 0 and ("\n\n**Aliases:** _" .. prefix .. table.concat(aliases, "_ , _" .. prefix) .. "_") or "")
 					}
 				})
 			else
@@ -1300,7 +1285,7 @@ commands["help"] = {
 					embed = {
 						color = color.fail,
 						title = ":loudspeaker: Help",
-						description = "The command **!" .. parameters .. "** doesn't exist!"
+						description = "The command **" .. prefix .. parameters .. "** doesn't exist!"
 					}
 				})
 			end
@@ -1311,7 +1296,7 @@ commands["help"] = {
 					color = color.info,
 					title = ":loudspeaker: General help",
 					description = table.fconcat(commands, "", function(index, value)
-						return value.sys and "" or (":small_" .. (value.highlevel and "orange" or "blue") .. "_diamond: **!" .. index .. "** - " .. value.description .. "\n")
+						return value.sys and "" or (":small_" .. (value.highlevel and "orange" or "blue") .. "_diamond: **" .. prefix .. index .. "** - " .. value.description .. "\n")
 					end, nil, nil, pairsByIndexes)
 				}
 			})
@@ -1320,7 +1305,7 @@ commands["help"] = {
 }
 commands["members"] = {
 	description = "Lists the module team members.",
-	syntax = "!members [pattern]",
+	syntax = prefix .. "members [pattern]",
 	connection = true,
 	fn = function(message, parameters)
 		local body = forumClient:getPage(locales.ajaxList)
@@ -1363,7 +1348,7 @@ commands["members"] = {
 }
 commands["modules"] = {
 	description = "Lists the current modules available in Transformice.",
-	syntax = "!modules [[from Community / by Player] [level ModuleLevel(0=semi / 1=official)] [#pattern]]",
+	syntax = prefix .. "modules [[from Community / by Player] [level ModuleLevel(0=semi / 1=official)] [#pattern]]",
 	connection = true,
 	fn = function(message, parameters)
 		local body = forumClient:getPage(locales.roomList)
@@ -1456,7 +1441,7 @@ commands["modules"] = {
 }
 commands["quote"] = {
 	description = "Quotes a message.",
-	syntax = "!quote [channel_id-]message_id",
+	syntax = prefix .. "quote [channel_id-]message_id",
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
@@ -1507,7 +1492,7 @@ commands["refresh"] = {
 }
 commands["reject"] = {
 	description = "Messages a player to inform their application got rejected.",
-	syntax = "!reject PlayerName#0000",
+	syntax = prefix .. "reject PlayerName#0000",
 	connection = true,
 	highlevel = true,
 	fn = function(message, parameters)
@@ -1542,7 +1527,7 @@ commands["reject"] = {
 }
 commands["terms"] = {
 	description = "Messages a player to inform their application got accepted.",
-	syntax = "!terms PlayerName#0000",
+	syntax = prefix .. "terms PlayerName#0000",
 	connection = true,
 	highlevel = true,
 	fn = function(message, parameters)
@@ -1577,7 +1562,7 @@ commands["terms"] = {
 }
 commands["tree"] = {
 	description = "Displays the Lua tree.",
-	syntax = "!tree [path]",
+	syntax = prefix .. "tree [path]",
 	fn = function(message, parameters)
 		local src, pathExists = envTfm, true
 		if parameters and #parameters > 0 then
@@ -1650,7 +1635,7 @@ commands["update"] = {
 }
 commands["upload"] = {
 	description = "Uploads an image in module-images.",
-	syntax = "!upload link / imgur album / image",
+	syntax = prefix .. "upload link / imgur album / image",
 	connection = true,
 	fn = function(message, parameters, get)
 		local img = message.attachment and message.attachment.url
@@ -1822,9 +1807,15 @@ local messageCreate = function(message)
 		return client:leave()
 	end
 
+	-- Checks if the message pinged the bot
+	if string.find(message.content, "<@!?" .. client.user.id .. ">") then
+		toDelete[message.id] = message:reply("<@!" .. message.author.id .. ">\n" .. table.random(greetings) .. "\n\nMy prefix is `" .. prefix .. "`. Type `" .. prefix .. "help` to learn more!")
+		return
+	end
+
 	-- Detect command and parameters
-	local command, parameters = string.match(message.content, "^!(.-)[\n ]+(.*)")
-	command = command or string.match(message.content, "^!(.+)")
+	local command, parameters = string.match(message.content, "^" .. prefix .. "(.-)[\n ]+(.*)")
+	command = command or string.match(message.content, "^" .. prefix .. "(.+)")
 
 	if not command then return end
 
@@ -1841,7 +1832,7 @@ local messageCreate = function(message)
 					embed = {
 						color = color.fail,
 						title = "Authorization denied.",
-						description = "You do not have access to the command **!" .. command .. "**!"
+						description = "You do not have access to the command **" .. prefix .. command .. "**!"
 					}
 				})
 			end
@@ -2060,6 +2051,7 @@ local checkApplications = function()
 
 	local body = forumClient:getPage(locales.section)
 
+	-- Checks new topics and new messages (counter only)
 	local newApplications, topics, counter, toCheck = { }, { }, 0, { }
 	string.gsub(body, 'href="(%S+)"> +%[MODULE%] +(.-) +</a>.-messages%-(.-)".->(%d+)</a>', function(url, playerName, topicState, totalComments)
 		if topicState == "reponses" or topicState == "nouveau" then
@@ -2117,6 +2109,61 @@ local checkApplications = function()
 			forumClient:getPage(toCheck[page])
 		end
 	end
+
+	-- Caches the output for !apps
+	counter = 0
+	local applications = { }
+	string.gsub(body, 'href="((topic%?f=6&t=%d+)&p=1#m%d+)"> +%[MODULE%] +(.-) +</a>', function(current_url, init_url, playerName)
+		counter = counter + 1
+		applications[counter] = { current_url, init_url, playerName }
+	end)
+
+	counter = 0
+	local list = { }
+	local new, yeses, nos, unknowns
+
+	for application = 1, #applications do
+		local topic = forumClient:getPage(applications[application][2])
+
+		new, yeses, nos, unknowns = false, 0, 0, 0
+		if topic then
+			if string.find(applications[application][1], "m1$") then new = true end -- 1 comment
+
+			local first = true
+			string.gsub(topic, '<div id="message_%d+">(.-)</div>', function(comment)
+				if first then
+					first = false
+				else
+					comment = " " .. string.lower(comment) .. " "
+					local yes = string.find(comment, "[%W]yes[%W]")
+					local no = string.find(comment, "[%W]no[%W]")
+
+					if yes and not no then
+						yeses = yeses + 1
+					elseif no and not yes then
+						nos = nos + 1
+					else
+						unknowns = unknowns + 1
+					end
+				end
+			end)
+		end
+
+		counter = counter + 1
+		list[counter] = {
+			url = applications[application][2],
+			playerName = applications[application][3],
+			y = yeses,
+			n = nos,
+			unkn = unknowns,
+			isNew = new
+		}
+	end
+
+	cachedApplications = (#list > 0 and ({
+		timestamp = string.gsub(discordia.Date():toISO(), " ", ""), -- gsub avoid Discordia glitches
+		data = list
+	}) or nil)
 end
 local checkPrivateMessages = function()
 	do return end
