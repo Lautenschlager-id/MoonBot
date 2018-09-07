@@ -927,9 +927,10 @@ local alias = {
 	["accept"] = "terms",
 	["applications"] = "apps",
 	["deny"] = "reject",
-	['m'] = "members",
 	['i'] = "upload",
 	["img"] = "upload",
+	["lua"] = "tree",
+	['m'] = "members",
 	["rooms"] = "modules"
 }
 
@@ -977,12 +978,13 @@ commands["adoc"] = {
 							local list, desc = string.match(param, "(.-) ?: (.+)")
 
 							if list then
-								local params = { }
+								local params, counter = { }, 0
 								for name, type in string.gmatch(list, "(%w+) %((.-)%)") do
-									params[#params + 1] = "`" .. type .. "` **" .. name .. "**"
+									counter = counter + 1
+									params[counter] = "`" .. type .. "` **" .. name .. "**"
 								end
 
-								if #params > 0 and desc then
+								if counter > 0 and desc then
 									param = table.concat(params, ", ") .. " ~> " .. desc
 								end
 							end
@@ -1536,8 +1538,6 @@ commands["reject"] = {
 
 		msg:addReaction(reactions.Y)
 		msg:addReaction(reactions.N)
-
-		toDelete[message.id] = msg
 	end
 }
 commands["terms"] = {
@@ -1573,8 +1573,71 @@ commands["terms"] = {
 
 		msg:addReaction(reactions.Y)
 		msg:addReaction(reactions.N)
+	end
+}
+commands["tree"] = {
+	description = "Displays the Lua tree.",
+	syntax = "!tree [path]",
+	fn = function(message, parameters)
+		local src, pathExists = envTfm, true
+		if parameters and #parameters > 0 then
+			for p in string.gmatch(parameters, "[^%.]+") do
+				p = tonumber(p) or p
+				src = src[p]
 
-		toDelete[message.id] = msg
+				if not src then
+					pathExists = false
+					break
+				end
+			end
+
+			if not pathExists then
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "<:wheel:456198795768889344> Invalid path",
+						description = "The path **`" .. parameters .. "`** doesn't exist"
+					}
+				})
+				return
+			end
+		end
+
+		local sortedSrc, counter = { }, 0
+		for k, v in next, src do
+			counter = counter + 1
+			sortedSrc[counter] = { k, tostring(v), type(v) }
+		end
+		table.sort(sortedSrc, function(value1, value2)
+			if value1[3] == "number" and value2[3] == "number" then
+				value1 = tonumber(value1[2])
+				value2 = tonumber(value2[2])
+			else
+				value1 = value1[1]
+				value2 = value2[1]
+			end
+
+			return value1 < value2
+		end)
+
+		local lines = splitByLine(table.fconcat(sortedSrc, "\n", function(index, value)
+			return "`" .. value[3] .. "` **" .. value[1] .. "** : `" .. value[2] .. "`" 
+		end))
+
+		local msgs = { }
+		for line = 1, #lines do
+			msgs[line] = message:reply({
+				content = (line == 1 and "<@!" .. message.author.id .. ">" or nil),
+				embed = {
+					color = color.info,
+					title = (line == 1 and "<:wheel:456198795768889344> " .. (parameters and ("'" .. parameters .. "' ") or "") .. "Tree" or nil),
+					description = lines[line]
+				}
+			})
+		end
+
+		toDelete[message.id] = msgs
 	end
 }
 commands["update"] = {
@@ -1824,6 +1887,10 @@ local messageDelete = function(message)
 		toDelete[message.id] = nil
 	end
 end
+local messageUpdate = function(message)
+	messageDelete(message)
+	messageCreate(message)
+end
 
 local reactionAdd = function(cached, channel, messageId, emojiName, userId)
 	if userId == client.user.id then return end
@@ -1844,8 +1911,6 @@ local reactionAdd = function(cached, channel, messageId, emojiName, userId)
 				local member = message.guild:getMember(user)
 				if member then
 					if emojiName == reactions.Y then
-						toDelete[messageId] = nil -- So it doesn't delete the confirmation message if the member deletes his message
-
 						local playerName = string.match(message.embed.description, "%*%*(.-)%*%*")
 
 						local desc = "<:atelier:458403092417740824> <@!" .. user .. "> (`" .. member.name .. "`) "
@@ -1900,6 +1965,18 @@ client:on("messageDelete", function(message)
 			embed = {
 				color = color.error,
 				title = "evt@MessageDelete => Fatal Error!",
+				description = "```\n" .. err .. "```"
+			}
+		})
+	end
+end)
+client:on("messageUpdate", function(message)
+	local success, err = pcall(messageUpdate, message)
+	if not success then
+		message:reply({
+			embed = {
+				color = color.error,
+				title = "evt@MessageUpload => Fatal Error!",
 				description = "```\n" .. err .. "```"
 			}
 		})
