@@ -68,197 +68,12 @@ end
 
 require("Content/functions")
 
-local boundaries = { }
-
-local forum
-do
-	local _, openssl = pcall(require, "openssl")
-	local sha256 = openssl.digest.get("sha256")
-	local toSha256 = function(str)
-		local hash = openssl.digest.new(sha256)
-		hash:update(str)
-		return hash:final()
-	end
-
-	local saltBytes = {
-		247,	026,	166,	222,	143,	023,	118,
-		168,	003,	157,	050,	184,	161,	086,
-		178,	169,	062,	221,	067,	157,	197,
-		221,	206,	086,	211,	183,	164,	005,
-		074,	013,	008,	176
-	}
-
-	forum = function()
-		local self = { }
-		local this = {
-			username = "",
-			cookies = { },
-			getInfo = 0 -- 0 | 1 | 2 = get all cookies, get all cookies after login, do not get JSESSIONID, token, token_date
-		}
-
-		self.getKeys = function(self, where)
-			local header, body = http.request("GET", "https://atelier801.com/" .. (where or "index"), self.headers(self))
-
-			self.setCookies(self, header)
-			return { string.match(body, '<input type="hidden" name="(.-)" value="(.-)">') }
-		end
-
-		self.getPage = function(self, pageName)
-			local header, body = http.request("GET", "https://atelier801.com/" .. pageName, self.headers(self))
-			return body
-		end
-
-		self.getPasswordHash = function(self, password)
-			local hash = toSha256(password)
-
-			local chars = { }
-			for i = 1, #saltBytes do
-				chars[i] = string.char(saltBytes[i])
-			end
-
-			hash = toSha256(hash .. table.concat(chars))
-			local len = #hash
-
-			local out, counter = { }, 0
-			for i = 1, len, 2 do
-				counter = counter + 1
-				out[counter] = string.char(tonumber(string.sub(hash, i, i + 1), 16))
-			end
-
-			return base64.encode(table.concat(out))
-		end
-
-		self.getUsername = function(self)
-			return this.username
-		end
-
-		self.headers = function(self)
-			return {
-				{ "User-Agent", "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36" },
-				{ "Cookie", table.fconcat(this.cookies, "; ", function(index, value)
-					return index .. "=" .. value
-				end) }
-			}
-		end
-
-		self.isConnected = function(self)
-			return self.getUsername(self) ~= ""
-		end
-		
-		self.login = function(self, username, password)
-			if self.isConnected(self) then
-				print("[ERROR] You are already logged in the account [" .. this.username .. "].")
-				return false
-			end
-
-			print("[CONNECTION] Connecting to [" .. username .. "]")
-
-			local body = self.page(self, "identification", {
-				{ "rester_connecte", "on" },
-				{ "id", username },
-				{ "pass", self.getPasswordHash(self, password) },
-				{ "redirect", "https://atelier801.com" }
-			}, "login")
-
-			if string.sub(body, 2, 15) == '"supprime":"*"' then
-				this.username = username
-				print("[CONNECTION] Connected to [" .. username .. "]")
-				this.getInfo = 1
-				return true, body
-			else
-				print("[CONNECTION] Error trying to log in [" .. username .. "]")
-				return false, body
-			end
-		end
-
-		self.logout = function(self)
-			if not self.isConnected(self) then
-				print("[ERROR] You are not logged.")
-				return false
-			end
-
-			print("[CONNECTION] Disconnecting from [" .. this.username .. "]")
-
-			local body = self.page(self, "deconnexion")
-
-			if string.sub(body, 3, 13) == 'redirection' then
-				print("[CONNECTION] Disconnected from [" .. this.username .. "]")
-				this.username = ""
-				this.cookies = { }
-				this.getInfo = 0
-				return true, body
-			else
-				print("[CONNECTION] Error trying to disconnect from [" .. this.username .. "]")
-				return false, body
-			end
-		end
-
-		self.page = function(self, pageName, postData, ajax, keyLocation, fileBody)
-			local keys = self.getKeys(self, keyLocation or ajax)
-
-			local headers = self.headers(self)
-			if ajax then
-				headers[3] = { "Accept", "application/json, text/javascript, */*; q=0.01" }
-				headers[4] = { "Accept-Language", "en-US,en;q=0.9" }
-				headers[5] = { "X-Requested-With", "XMLHttpRequest" }
-				headers[6] = { "Content-Type", (fileBody and "multipart/form-data; boundary=" .. boundaries[1] or "application/x-www-form-urlencoded; charset=UTF-8") }
-				headers[7] = { "Referer", "https://atelier801.com/" .. ajax }
-				headers[8] = { "Connection", "keep-alive" }
-			end
-
-			postData = postData or { }
-			postData[#postData + 1] = keys
-
-			local header, body = http.request("POST", "https://atelier801.com/" .. pageName, headers, (fileBody and string.gsub(fileBody, "/KEY(%d)/", function(id)
-				return keys[tonumber(id)]
-			end, 2) or table.fconcat(postData, '&', function(index, value)
-				return value[1] .. "=" .. encodeUrl(value[2])
-			end)))
-
-			self.setCookies(self, header)
-
-			return body
-		end
-
-		self.sendPrivateMessage = function(self, to, subject, message)
-			local body = self.page(self, "create-discussion", {
-				{ "destinataires", to .. "§#§Shamousey#0015" },
-				{ "objet", subject },
-				{ "message", message }
-			}, "new-discussion")
-
-			return body
-		end
-		
-		self.setCookies = function(self, header)
-			for i = 1, #header do
-				if header[i][1] == "Set-Cookie" then
-					local cookie = header[i][2]
-					cookie = string.sub(cookie, 1, string.find(cookie, ';') - 1)
-
-					local eq = string.find(cookie, '=')
-					local cookieName = string.sub(cookie, 1, eq - 1)
-
-					
-					if this.getInfo < 2 or (cookieName ~= "JSESSIONID" and cookieName ~= "token" and cookieName ~= "token_date") then
-						this.cookies[cookieName] = string.sub(cookie, eq + 1)
-					end
-				end
-			end
-			if this.getInfo == 1 then
-				this.getInfo = 2
-			end
-		end
-
-		return self
-	end
-end
-
 --[[ System ]]--
 math.randomseed(os.time())
 local forumClient
 
 local commands = { }
+local boundaries = { }
 local account = {
 	username = os.readFile("Info/Forum/username", "*l"),
 	password = os.readFile("Info/Forum/password", "*l")
@@ -901,23 +716,212 @@ local removeHtmlFormat = function(str)
 	return str
 end
 
-local attachFile = function(fileData, fileExtension)
-	local out = {
-		boundaries[2],
-		'Content-Disposition: form-data;name="/KEY1/"',
-		"\r\n/KEY2/",
-		boundaries[2],
-		'Content-Disposition: form-data; name="fichier"; filename="MoonBot_Upload.' .. fileExtension .. '"',
-		"Content-Type: image/" .. fileExtension .. "\r\n",
-		fileData,
-		boundaries[3]
-	}
-	return table.concat(out, "\r\n")
-end
-
 local cachedApplications
 
 local userTimers = { }
+
+local forum
+do
+	local _, openssl = pcall(require, "openssl")
+	local sha256 = openssl.digest.get("sha256")
+	local toSha256 = function(str)
+		local hash = openssl.digest.new(sha256)
+		hash:update(str)
+		return hash:final()
+	end
+
+	local saltBytes = {
+		247,	026,	166,	222,	143,	023,	118,
+		168,	003,	157,	050,	184,	161,	086,
+		178,	169,	062,	221,	067,	157,	197,
+		221,	206,	086,	211,	183,	164,	005,
+		074,	013,	008,	176
+	}
+
+	forum = function()
+		local self = { }
+		local this = {
+			username = "",
+			cookies = { },
+			getInfo = 0 -- 0 | 1 | 2 = get all cookies, get all cookies after login, do not get JSESSIONID, token, token_date
+		}
+
+		self.attachFile = function(self, fileName, fileData, fileExtension)
+			local out = {
+				boundaries[2],
+				'Content-Disposition: form-data;name="/KEY1/"',
+				"\r\n/KEY2/",
+				boundaries[2],
+				'Content-Disposition: form-data; name="fichier"; filename="[BOT] ' .. fileName .. '.' .. fileExtension .. '"',
+				"Content-Type: image/" .. fileExtension .. "\r\n",
+				fileData,
+				boundaries[3]
+			}
+			return table.concat(out, "\r\n")
+		end
+
+		self.getKeys = function(self, where)
+			local header, body = http.request("GET", "https://atelier801.com/" .. (where or "index"), self.headers(self))
+
+			self.setCookies(self, header)
+			return { string.match(body, '<input type="hidden" name="(.-)" value="(.-)">') }
+		end
+
+		self.getPage = function(self, pageName)
+			local header, body = http.request("GET", "https://atelier801.com/" .. pageName, self.headers(self))
+			return body
+		end
+
+		self.getPasswordHash = function(self, password)
+			local hash = toSha256(password)
+
+			local chars = { }
+			for i = 1, #saltBytes do
+				chars[i] = string.char(saltBytes[i])
+			end
+
+			hash = toSha256(hash .. table.concat(chars))
+			local len = #hash
+
+			local out, counter = { }, 0
+			for i = 1, len, 2 do
+				counter = counter + 1
+				out[counter] = string.char(tonumber(string.sub(hash, i, i + 1), 16))
+			end
+
+			return base64.encode(table.concat(out))
+		end
+
+		self.getUsername = function(self)
+			return this.username
+		end
+
+		self.headers = function(self)
+			return {
+				{ "User-Agent", "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36" },
+				{ "Cookie", table.fconcat(this.cookies, "; ", function(index, value)
+					return index .. "=" .. value
+				end) }
+			}
+		end
+
+		self.hostImage = function(self, link, fileName, image, extension)
+			local body = self.page(self, imageHost.host, { }, link, nil, self.attachFile(self, fileName, image, extension))
+			return body
+		end
+
+		self.isConnected = function(self)
+			return self.getUsername(self) ~= ""
+		end
+		
+		self.login = function(self, username, password)
+			if self.isConnected(self) then
+				print("[ERROR] You are already logged in the account [" .. this.username .. "].")
+				return false
+			end
+
+			print("[CONNECTION] Connecting to [" .. username .. "]")
+
+			local body = self.page(self, "identification", {
+				{ "rester_connecte", "on" },
+				{ "id", username },
+				{ "pass", self.getPasswordHash(self, password) },
+				{ "redirect", "https://atelier801.com" }
+			}, "login")
+
+			if string.sub(body, 2, 15) == '"supprime":"*"' then
+				this.username = username
+				print("[CONNECTION] Connected to [" .. username .. "]")
+				this.getInfo = 1
+				return true, body
+			else
+				print("[CONNECTION] Error trying to log in [" .. username .. "]")
+				return false, body
+			end
+		end
+
+		self.logout = function(self)
+			if not self.isConnected(self) then
+				print("[ERROR] You are not logged.")
+				return false
+			end
+
+			print("[CONNECTION] Disconnecting from [" .. this.username .. "]")
+
+			local body = self.page(self, "deconnexion")
+
+			if string.sub(body, 3, 13) == 'redirection' then
+				print("[CONNECTION] Disconnected from [" .. this.username .. "]")
+				this.username = ""
+				this.cookies = { }
+				this.getInfo = 0
+				return true, body
+			else
+				print("[CONNECTION] Error trying to disconnect from [" .. this.username .. "]")
+				return false, body
+			end
+		end
+
+		self.page = function(self, pageName, postData, ajax, keyLocation, fileBody)
+			local keys = self.getKeys(self, keyLocation or ajax)
+
+			local headers = self.headers(self)
+			if ajax then
+				headers[3] = { "Accept", "application/json, text/javascript, */*; q=0.01" }
+				headers[4] = { "Accept-Language", "en-US,en;q=0.9" }
+				headers[5] = { "X-Requested-With", "XMLHttpRequest" }
+				headers[6] = { "Content-Type", (fileBody and "multipart/form-data; boundary=" .. boundaries[1] or "application/x-www-form-urlencoded; charset=UTF-8") }
+				headers[7] = { "Referer", "https://atelier801.com/" .. ajax }
+				headers[8] = { "Connection", "keep-alive" }
+			end
+
+			postData = postData or { }
+			postData[#postData + 1] = keys
+
+			local header, body = http.request("POST", "https://atelier801.com/" .. pageName, headers, (fileBody and string.gsub(fileBody, "/KEY(%d)/", function(id)
+				return keys[tonumber(id)]
+			end, 2) or table.fconcat(postData, '&', function(index, value)
+				return value[1] .. "=" .. encodeUrl(value[2])
+			end)))
+
+			self.setCookies(self, header)
+
+			return body
+		end
+
+		self.sendPrivateMessage = function(self, to, subject, message)
+			local body = self.page(self, "create-discussion", {
+				{ "destinataires", to .. "§#§Shamousey#0015" },
+				{ "objet", subject },
+				{ "message", message }
+			}, "new-discussion")
+
+			return body
+		end
+		
+		self.setCookies = function(self, header)
+			for i = 1, #header do
+				if header[i][1] == "Set-Cookie" then
+					local cookie = header[i][2]
+					cookie = string.sub(cookie, 1, string.find(cookie, ';') - 1)
+
+					local eq = string.find(cookie, '=')
+					local cookieName = string.sub(cookie, 1, eq - 1)
+
+					
+					if this.getInfo < 2 or (cookieName ~= "JSESSIONID" and cookieName ~= "token" and cookieName ~= "token_date") then
+						this.cookies[cookieName] = string.sub(cookie, eq + 1)
+					end
+				end
+			end
+			if this.getInfo == 1 then
+				this.getInfo = 2
+			end
+		end
+
+		return self
+	end
+end
 
 --[[ Commands ]]--
 local hasParam = function(message, parameters)
@@ -1748,7 +1752,7 @@ commands["upload"] = {
 		end
 
 		local link = imageHost.link .. encodeUrl(account.username)
-		local body = forumClient:page(imageHost.host, { }, link, nil, attachFile(image, extension))
+		local body = forumClient:hostImage(link, message.author.id, image, extension)
 		if string.sub(body, 3, 13) == "redirection" then
 			local list = forumClient:getPage(link)
 
@@ -1883,7 +1887,7 @@ local messageCreate = function(message)
 				}
 			})
 		else
-			userTimers[message.author.id] = os.time() + .7
+			userTimers[message.author.id] = os.time() + 1.2
 		end
 	end
 end
