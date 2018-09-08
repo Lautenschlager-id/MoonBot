@@ -917,6 +917,8 @@ end
 
 local cachedApplications
 
+local userTimers = { }
+
 --[[ Commands ]]--
 local hasParam = function(message, parameters)
 	if not parameters or #parameters == 0 then
@@ -1661,7 +1663,7 @@ commands["upload"] = {
 			local header, body = http.request("GET", parameters)
 
 			local images, counter = { }, 0
-			string.gsub(body, '<div id="(%S+)" class="post%-image%-container', function(image)
+			string.gsub(tostring(body), '<div id="(%S+)" class="post%-image%-container', function(image)
 				counter = counter + 1
 				images[counter] = image .. ".png"
 			end)
@@ -1739,7 +1741,7 @@ commands["upload"] = {
 				embed = {
 					color = color.fail,
 					title = "<:atelier:458403092417740824> Invalid image",
-					description = "The link provided could not be uploaded.\n```\n" .. parameters .. "```"
+					description = "The link provided could not be uploaded.\n```\n" .. tostring(_) .. "```\n```\n" .. parameters .. "```"
 				}
 			})
 			return
@@ -1778,6 +1780,7 @@ commands["upload"] = {
 						description = "Failure trying to upload the image **" .. parameters .. "**\n```\n" .. tostring(body) .. "```"
 					}
 				})
+				return
 			end
 		end
 
@@ -1821,6 +1824,13 @@ local messageCreate = function(message)
 	if string.find(message.content, "<@!?" .. client.user.id .. ">") then
 		toDelete[message.id] = message:reply("<@!" .. message.author.id .. ">\n" .. table.random(greetings) .. "\n\nMy prefix is `" .. prefix .. "`. Type `" .. prefix .. "help` to learn more!")
 		return
+	end
+
+	-- Check if the user is allowed to use a command
+	if userTimers[message.author.id] then
+		if os.time() < userTimers[message.author.id] then return end
+	else
+		userTimers[message.author.id] = 0
 	end
 
 	-- Detect command and parameters
@@ -1872,6 +1882,8 @@ local messageCreate = function(message)
 					description = "```\n" .. err .. "```"
 				}
 			})
+		else
+			userTimers[message.author.id] = os.time() + .7
 		end
 	end
 end
