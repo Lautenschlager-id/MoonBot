@@ -12,6 +12,7 @@ local clock = discordia.Clock()
 local http = require("coro-http")
 local base64 = require("Content/base64")
 local json = require("json")
+local timer = require("timer")
 
 local splitByChar = function(content, int)
 	int = int or 1900
@@ -964,6 +965,7 @@ local alias = {
 	["accept"] = "terms",
 	["answer"] = "reply",
 	["applications"] = "apps",
+	["bulb"] = "remind",
 	["deny"] = "reject",
 	['i'] = "upload",
 	["img"] = "upload",
@@ -971,7 +973,9 @@ local alias = {
 	['m'] = "members",
 	["message"] = "mobile",
 	["pm"] = "mobile",
-	["rooms"] = "modules"
+	["reminder"] = "remind",
+	["rooms"] = "modules",
+	["say"] = "remind"
 }
 
 -- description => Description of the command, appears in !help
@@ -1605,6 +1609,58 @@ commands["reject"] = {
 		msg:addReaction(reactions.N)
 	end
 }
+commands["remind"] = {
+	description = "Sets a reminder. Bot will remind you.",
+	syntax = prefix .. "remind time\\_and\\_order text",
+	fn = function(message, parameters)
+		if not hasParam(message, parameters) then return end
+
+		local time, order, text = string.match(parameters, "^(%d+%.?%d*)(%a+)[\n ]+(.-)$")
+		if time and order and text and #text > 0 then
+			time = tonumber(time)
+			if order == "ms" then
+				time = math.clamp(time, 6e4, 216e5)
+			elseif order == 's' then
+				time = math.clamp(time, 60, 21600) * 1000
+			elseif order == 'm' then
+				time = math.clamp(time, 1, 360) * 6e4
+			elseif order == 'h' then
+				time = math.clamp(time, .017, 6) * 3.6e6
+			else
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = ":timer: Invalid time magnitude order '" .. order .. "'",
+						description = "The available time magnitude orders are **ms**, **s**, **m**, **h**."
+					}
+				})
+				return
+			end
+
+			timer.setTimeout(time, coroutine.wrap(function(channel, text, userId, cTime)
+				cTime = os.time() - cTime
+				local h, m, s = math.floor(cTime / 3600), math.floor(cTime % 3600 / 60), math.floor(cTime % 3600 % 60)
+				local info = (((h > 0 and (h .. " hour") .. (h > 1 and "s" or "") .. ((s > 0 and ", ") or (m > 0 and " and ") or "")) or "") .. ((m > 0 and (m .. " minute") .. (m > 1 and "s" or "")) or "") .. ((s > 0 and (" and " .. s .. " second" .. (s > 1 and "s" or ""))) or ""))
+
+				channel:send({
+					content = "<@" .. userId .. ">",
+					embed = {
+						color = color.info,
+						title = ":bulb: Reminder",
+						description = info .. " ago you asked to be reminded about ```\n" .. text .. "```"
+					}
+				})
+			end), message.channel, text, message.author.id, os.time())
+
+			local ok = message:reply(":thumbsup:")
+			timer.setTimeout(1e4, coroutine.wrap(function(ok)
+				ok:delete()
+			end), ok)
+			message:delete()
+		end
+	end
+}
 commands["reply"] = {
 	description = "Answers a private message.",
 	syntax = prefix .. "reply conversation\\_id \\`\\`\\` BBCODE answer \\`\\`\\`",
@@ -2153,7 +2209,7 @@ local memberLeave = function(member)
 		client:getChannel(channels.logs):send({
 			embed = {
 				color = color.info,
-				description = "<@!" .. member.id .. "> [" .. member.name .. "] just left the server!"
+				description = "<@" .. member.id .. "> [" .. member.name .. "] just left the server!"
 			}
 		})
 	end
