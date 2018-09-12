@@ -5,7 +5,6 @@ discordia.extensions()
 local client = discordia.Client({
 	cacheAllMembers = true
 })
-client._options.routeDelay = 0
 
 local clock = discordia.Clock()
 
@@ -111,8 +110,8 @@ local roles = {
 local botNames = { "Jerry", "ModuleAPI", "MoonAPI", "Moon", "FroggyJerry", "MoonForMice", "MoonduleAPI", "MoonBot", "ModuleBot", "JerryForMice", "JerryForMoon", "MoonPie" }
 local botAvatars = { }
 local botStatus = {
-	{ "online", { "I'm ready to be used!", "Yoohoo", "LUA or Phyton, that's the question", ":jerry:", "Ping @Pikashu", "Atelier801 Forums" } },
-	{ "idle", { "Waiting Pikashu to update the API", "Waiting my Java application to compile", "Pong @Streaxx", "Editing TFM API", "Checking the moon" } },
+	{ "online", { "I'm ready to be used!", "Yoohoo", "LUA or Phyton, that's the question", ":jerry", "Ping @Pikashu", "Atelier801 Forums" } },
+	{ "idle", { "Waiting Pikashu to update the API", "Waiting my Java application to compile", "Pong @Streaxx", "AAAAA i don't work the way i should", "Editing TFM API", "Checking the moon" } },
 	{ "dnd", { "Taking shower BRB", "I am stressed, do /moon", "My disk is almost full", "Reading applications", "Marriage proposal to Sharpiebot" } }
 }
 
@@ -157,6 +156,7 @@ local communities = {
 	["fr"] = "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7",
 	["gb"] = "\xF0\x9F\x87\xAC\xF0\x9F\x87\xA7",
 	["nl"] = "\xF0\x9F\x87\xB3\xF0\x9F\x87\xB1",
+	["ro"] = "\xF0\x9F\x87\xB7\xF0\x9F\x87\xB4",
 	["ru"] = "\xF0\x9F\x87\xB7\xF0\x9F\x87\xBA",
 	["sa"] = "\xF0\x9F\x87\xB8\xF0\x9F\x87\xA6",
 	["tr"] = "\xF0\x9F\x87\xB9\xF0\x9F\x87\xB7",
@@ -747,17 +747,16 @@ do
 		}
 
 		self.attachFile = function(self, fileName, fileData, fileExtension)
-			local out = {
+			return table.concat({
 				boundaries[2],
 				'Content-Disposition: form-data;name="/KEY1/"',
 				"\r\n/KEY2/",
 				boundaries[2],
 				'Content-Disposition: form-data; name="fichier"; filename="[BOT] ' .. fileName .. '.' .. fileExtension .. '"',
-				"Content-Type: image/" .. fileExtension .. "\r\n",
+				"Content-Type: image/" .. (fileExtension == "jpg" and "jpeg" or fileExtension) .. "\r\n",
 				fileData,
 				boundaries[3]
-			}
-			return table.concat(out, "\r\n")
+			}, "\r\n")
 		end
 
 		self.getKeys = function(self, where)
@@ -768,6 +767,7 @@ do
 		end
 
 		self.getPage = function(self, pageName)
+			-- Note that :page is in english and :getPage is in french because of the headers.
 			local header, body = http.request("GET", "https://atelier801.com/" .. pageName, self.headers(self))
 			return body
 		end
@@ -806,8 +806,7 @@ do
 		end
 
 		self.hostImage = function(self, link, fileName, image, extension)
-			local body = self.page(self, imageHost.host, { }, link, nil, self.attachFile(self, fileName, image, extension))
-			return body
+			return self.page(self, imageHost.host, { }, link, nil, self.attachFile(self, fileName, image, extension))
 		end
 
 		self.isConnected = function(self)
@@ -890,15 +889,20 @@ do
 		end
 
 		self.sendPrivateMessage = function(self, to, subject, message)
-			local body = self.page(self, "create-discussion", {
+			return self.page(self, "create-discussion", {
 				{ "destinataires", to .. "§#§Shamousey#0015" },
 				{ "objet", subject },
 				{ "message", message }
 			}, "new-discussion")
-
-			return body
 		end
-		
+
+		self.answerPrivateMessage = function(self, conversationId, answer)
+			return self.page(self, "answer-conversation", {
+				{ "co", conversationId },
+				{ "message_reponse", answer }
+			}, "conversation?co=" .. conversationId)
+		end
+
 		self.setCookies = function(self, header)
 			for i = 1, #header do
 				if header[i][1] == "Set-Cookie" then
@@ -958,12 +962,15 @@ end
 local alias = {
 	-- alias, cmd
 	["accept"] = "terms",
+	["answer"] = "reply",
 	["applications"] = "apps",
 	["deny"] = "reject",
 	['i'] = "upload",
 	["img"] = "upload",
 	["lua"] = "tree",
 	['m'] = "members",
+	["message"] = "mobile",
+	["pm"] = "mobile",
 	["rooms"] = "modules"
 }
 
@@ -979,7 +986,7 @@ commands["adoc"] = {
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
-		local head, body = http.request("GET", "https://atelier801.com/topic?f=826122&t=924910")
+		local header, body = http.request("GET", "https://atelier801.com/topic?f=826122&t=924910")
 
 		if body then
 			body = string.gsub(string.gsub(body, "<br />", "\n"), " ", "")
@@ -1136,7 +1143,7 @@ commands["doc"] = {
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
-		local head, body = http.request("GET", "http://www.lua.org/work/doc/manual.html")
+		local header, body = http.request("GET", "http://www.lua.org/work/doc/manual.html")
 
 		if body then
 			local syntax, description = string.match(body, "<a name=\"pdf%-" .. parameters .. "\"><code>(.-)</code></a></h3>[\n<p>]*(.-)<hr>")
@@ -1362,6 +1369,53 @@ commands["members"] = {
 		end
 	end
 }
+commands["mobile"] = {
+	description = "Sends a private message with the embed in a text format.",
+	syntax = prefix .. "mobile message\\_id",
+	fn = function(message, parameters)
+		parameters = parameters and string.match(parameters, "%d+")
+
+		if parameters then
+			local msg = message.channel:getMessage(parameters)
+
+			if msg then
+				if msg.embed then
+					local content = { }
+
+					if msg.content then
+						content[#content + 1] = "`" .. msg.content .. "`"
+					end
+
+					if msg.embed.title then
+						content[#content + 1] = "**" .. msg.embed.title .. "**"
+					end
+					if msg.embed.description then
+						content[#content + 1] = msg.embed.description
+					end
+
+					local footerText = msg.embed.footer and msg.embed.footer.text
+					if footerText then
+						content[#content + 1] = "`" .. footerText .. "`"
+					end
+
+					local len = #content
+					content[len + (footerText and 0 or 1)] = (footerText and (content[len] .. " | ") or "") .. "`" .. os.date("%c", os.time(discordia.Date().fromISO(msg.timestamp):toTableUTC())) .. "`"
+
+					local img = (msg.attachment and msg.attachment.url) or (msg.embed and msg.embed.image and msg.embed.image.url)
+					message.author:send({
+						content = string.sub(table.concat(content, "\n"), 1, 2000),
+						embed = {
+							image = (img and { url = img } or nil)
+						}
+					})
+				else
+					message.author:send(msg.content)
+				end
+				message:delete()
+			end
+		end
+	end
+}
 commands["modules"] = {
 	description = "Lists the current modules available in Transformice.",
 	syntax = prefix .. "modules [[from Community / by Player] [level ModuleLevel(0=semi / 1=official)] [#pattern]]",
@@ -1395,7 +1449,15 @@ commands["modules"] = {
 					end
 				end
 			end)
+
+			local filter = search.commu or search.player or search.type
+
 			search.pattern = string.match(" " .. parameters, "[\n ]+#(.+)$")
+
+			if not search.pattern and not filter then
+				search.pattern = parameters
+			end
+			if not validPattern(message, body, search.pattern) then return end
 		end
 		
 		local list, counter = { }, 0
@@ -1500,7 +1562,9 @@ commands["quote"] = {
 commands["refresh"] = {
 	sys = true,
 	fn = function(message)
-		message:delete()
+		if message then
+			message:delete()
+		end
 
 		os.execute("luvit bot.lua")
 		os.exit()
@@ -1539,6 +1603,66 @@ commands["reject"] = {
 
 		msg:addReaction(reactions.Y)
 		msg:addReaction(reactions.N)
+	end
+}
+commands["reply"] = {
+	description = "Answers a private message.",
+	syntax = prefix .. "reply conversation\\_id \\`\\`\\` BBCODE answer \\`\\`\\`",
+	connection = true,
+	highlevel = true,
+	fn = function(message, parameters)
+		if not hasParam(message, parameters) then return end
+
+		local co, _, answer = string.match(parameters, "^(%d+)[\n ]+`(`?`?)%s*(.-)%s*%2`$")
+		if co then
+			local body = forumClient:getPage("conversation?co=" .. co)
+
+			if string.find(body, '<div class="modal%-body"> <p>  Interdit') then
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "<:atelier:458403092417740824> Invalid conversation id.",
+						description = "The conversation **" .. tostring(co) .. "** doesn't exist."
+					}
+				})
+				return
+			end
+
+			if #answer == 0 then
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "<:atelier:458403092417740824> Empty reply content.",
+						description = "You must insert a text within \\`."
+					}
+				})
+				return
+			end
+
+			local body = forumClient:answerPrivateMessage(co, answer)
+
+			if string.sub(body, 2, 11) == '"supprime"' then
+				message:reply({
+					embed = {
+						color = color.success,
+						title = "<:atelier:458403092417740824> Message Reply ( " .. co .. " )",
+						description = "<@!" .. message.author.id .. "> [" .. message.member.name .. "] replied the conversation **" .. co .. "** with the following content:\n```\n" .. answer .. "```"
+					}
+				})
+				message:delete()
+			else
+				toDelete[message.id] = message:reply({
+					content = "<@!" .. message.author.id .. ">",
+					embed = {
+						color = color.fail,
+						title = "<:atelier:458403092417740824> Private Message Error",
+						description = "Failure trying to send a reply for **co_" .. tostring(co) .. "**\n```\n" .. tostring(body) .. "```"
+					}
+				})
+			end
+		end
 	end
 }
 commands["terms"] = {
@@ -1665,24 +1789,24 @@ commands["upload"] = {
 
 		if string.sub(parameters, 1, 20) == "https://imgur.com/a/" then -- imgur album
 			local header, body = http.request("GET", parameters)
-
+        
 			local images, counter = { }, 0
 			string.gsub(tostring(body), '<div id="(%S+)" class="post%-image%-container', function(image)
 				counter = counter + 1
 				images[counter] = image .. ".png"
 			end)
-
+        
 			if counter > 0 then
 				local len, refMessage = (counter <= 13 and 0 or counter <= 23 and 1 or 2)
 				for image = 1, math.min(counter, 50) do
 					local code, failed = commands["upload"].fn(message, "https://i.imgur.com/" .. images[image], true)
-
+        
 					local imgurMarkdown, atelierMarkdown = "**" .. images[image] .. "**", "**" .. code .. "**"
 					imgurMarkdown = (len == 2 and imgurMarkdown or ("[" .. imgurMarkdown .. "](https://i.imgur.com/" .. images[image] .. ")"))
 					atelierMarkdown = (len == 2 and atelierMarkdown or ("[" .. atelierMarkdown .. "](http://images.atelier801.com/" .. code .. ")"))
-
+        
 					local result = (failed and ((len == 0 and "<:dnd:456197711251636235>" or ":x:") .. imgurMarkdown) or ((len == 0 and "<:online:456197711356755980> " or "") .. imgurMarkdown .. " ~> " .. atelierMarkdown))
-
+        
 					if image == 1 then
 						refMessage = channel:send({
 							content = "<@!" .. message.author.id .. ">",
@@ -1698,7 +1822,7 @@ commands["upload"] = {
 						refMessage:setEmbed(refMessage.embed)
 					end
 				end
-
+        
 				message.author:send({ embed = refMessage.embed })
 				message:delete()
 			else
@@ -1714,7 +1838,7 @@ commands["upload"] = {
 			return
 		end
 
-		local extension, formats = false, { ".jpg", ".bmp", ".png", ".jpeg", ".gif" }
+		local extension, formats = false, { ".jpg", ".png" }
 		for f = 1, #formats do
 			if string.find(parameters, formats[f]) then
 				extension = string.sub(formats[f], 2)
@@ -1738,14 +1862,14 @@ commands["upload"] = {
 			return
 		end
 
-		local _, image = http.request("GET", parameters)
+		local foo, image = http.request("GET", parameters)
 		if not image then
 			toDelete[message.id] = channel:send({
 				content = "<@!" .. message.author.id .. ">",
 				embed = {
 					color = color.fail,
 					title = "<:atelier:458403092417740824> Invalid image",
-					description = "The link provided could not be uploaded.\n```\n" .. tostring(_) .. "```\n```\n" .. parameters .. "```"
+					description = "The link provided could not be uploaded.\n```\n" .. tostring(foo) .. "```\n```\n" .. parameters .. "```"
 				}
 			})
 			return
@@ -1761,16 +1885,18 @@ commands["upload"] = {
 			if get then
 				return imageId
 			else
-				local msg = channel:send({
+				local embed = {
+					color = color.info,
+					title = "<:atelier:458403092417740824> Image upload",
+					description = "Your image code is [**" .. imageId .. "**](" .. imageLink .. ")\nFrom: ```\n" .. parameters .. "```",
+					image = { url = imageLink }
+				}
+
+				channel:send({
 					content = "<@!" .. message.author.id .. ">",
-					embed = {
-						color = color.info,
-						title = "<:atelier:458403092417740824> Image upload",
-						description = "Your image code is [**" .. imageId .. "**](" .. imageLink .. ")",
-						image = { url = imageLink }
-					}
+					embed = embed
 				})
-				message.author:send({ embed = msg.embed })
+				message.author:send({ embed = embed })
 			end
 		else
 			if get then
@@ -1832,7 +1958,9 @@ local messageCreate = function(message)
 
 	-- Check if the user is allowed to use a command
 	if userTimers[message.author.id] then
-		if os.time() < userTimers[message.author.id] then return end
+		if os.time() < userTimers[message.author.id] then
+			return
+		end
 	else
 		userTimers[message.author.id] = 0
 	end
@@ -1886,9 +2014,9 @@ local messageCreate = function(message)
 					description = "```\n" .. err .. "```"
 				}
 			})
-		else
-			userTimers[message.author.id] = os.time() + 1.2
+			return
 		end
+		userTimers[message.author.id] = os.time() + 1.2
 	end
 end
 local messageDelete = function(message)
@@ -1903,10 +2031,6 @@ local messageDelete = function(message)
 
 		toDelete[message.id] = nil
 	end
-end
-local messageUpdate = function(message)
-	messageDelete(message)
-	messageCreate(message)
 end
 
 local reactionAdd = function(cached, channel, messageId, emojiName, userId)
@@ -1982,18 +2106,6 @@ client:on("messageDelete", function(message)
 			embed = {
 				color = color.error,
 				title = "evt@MessageDelete => Fatal Error!",
-				description = "```\n" .. err .. "```"
-			}
-		})
-	end
-end)
-client:on("messageUpdate", function(message)
-	local success, err = pcall(messageUpdate, message)
-	if not success then
-		message:reply({
-			embed = {
-				color = color.error,
-				title = "evt@MessageUpload => Fatal Error!",
 				description = "```\n" .. err .. "```"
 			}
 		})
@@ -2201,6 +2313,7 @@ local checkPrivateMessages = function()
 		if messageState == "reponses" or messageState == "nouveau" then
 			local final = string.find(url, "&p")
 			local link = string.sub(url, 1, (final or 0) - 1)
+			local conversationId = string.match(link, "%d+$")
 
 			if not topicState == "nouveau" then -- new msg must be #1
 				link = link .. "&p=1#m" .. totalReplies
@@ -2209,7 +2322,7 @@ local checkPrivateMessages = function()
 			local checkedReplies = final and tonumber(string.sub(url, final + 6)) or 0
 			counter = counter + 1
 
-			toCheck[counter] = { title, messageState == "nouveau", link, totalReplies - (totalReplies - checkedReplies) + 1, totalReplies }
+			toCheck[counter] = { title, messageState == "nouveau", link, totalReplies - (totalReplies - checkedReplies) + 1, totalReplies, conversationId }
 		end
 	end)
 
@@ -2231,7 +2344,7 @@ local checkPrivateMessages = function()
 						local text = string.match(message, '>    #' .. reply .. '   </a>    </td> </tr> <tr> .- <div id="message_%d+">(.-)</div> </div>  </div> </td>')
 
 						counter = counter + 1
-						replies[counter + 1] = { string.sub(removeHtmlFormat(text), 1, 100), normalizeDiscriminator(normalizePlayerName(author)) }
+						replies[counter + 1] = { string.sub(removeHtmlFormat(text), 1, 200), normalizeDiscriminator(normalizePlayerName(author)) }
 					end
 				end
 			end
@@ -2241,7 +2354,7 @@ local checkPrivateMessages = function()
 					embed = {
 						color = color.info,
 						title = (toCheck[topic][2] and ":envelope_with_arrow:" or ":mailbox_with_mail:") .. " " .. toCheck[topic][1],
-						description = "[View conversation](https://atelier801.com/" .. toCheck[topic][3] .. ")\n" .. string.sub(table.fconcat(replies, "\n", function(index, value)
+						description = "[View conversation](https://atelier801.com/" .. toCheck[topic][3] .. ") - **" .. tostring(toCheck[topic][6]) .. "**\n" .. string.sub(table.fconcat(replies, "\n", function(index, value)
 							return "> " .. value[2] .. " ```\n" .. value[1] .. "```"
 						end), 1, 1900),
 						timestamp = discordia.Date():toISO()
@@ -2252,7 +2365,7 @@ local checkPrivateMessages = function()
 	end
 end
 
-local minutes = 0
+local minutes, hours = 0, 0
 local clockMin = function()
 	minutes = minutes + 1
 
@@ -2275,6 +2388,8 @@ local clockMin = function()
 	end
 end
 local clockHour = function()
+	hours = hours + 1
+
 	-- Change name once per day
 	updateLayout()
 end
