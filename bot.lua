@@ -1641,7 +1641,7 @@ commands["remind"] = {
 			timer.setTimeout(time, coroutine.wrap(function(channel, text, userId, cTime)
 				cTime = os.time() - cTime
 				local h, m, s = math.floor(cTime / 3600), math.floor(cTime % 3600 / 60), math.floor(cTime % 3600 % 60)
-				local info = (((h > 0 and (h .. " hour") .. (h > 1 and "s" or "") .. ((s > 0 and ", ") or (m > 0 and " and ") or "")) or "") .. ((m > 0 and (m .. " minute") .. (m > 1 and "s" or "")) or "") .. ((s > 0 and (" and " .. s .. " second" .. (s > 1 and "s" or ""))) or ""))
+				local info = (((h > 0 and (h .. " hour") .. (h > 1 and "s" or "") .. (((s > 0 and m > 0) and ", ") or (m > 0 and " and ") or "")) or "") .. ((m > 0 and (m .. " minute") .. (m > 1 and "s" or "")) or "") .. ((s > 0 and (" and " .. s .. " second" .. (s > 1 and "s" or ""))) or ""))
 
 				channel:send({
 					content = "<@" .. userId .. ">",
