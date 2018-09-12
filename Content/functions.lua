@@ -10,6 +10,10 @@ do
 	end
 end
 
+math.clam = function(value, min, max)
+	return value < min and min or value > max and max or value
+end
+
 os.readFile = function(file, format)
 	file = io.open(file, "r")
 	
@@ -20,7 +24,7 @@ os.readFile = function(file, format)
 	return out
 end
 
-table.fconcat = function(tbl, sep, f, i, j)
+table.fconcat = function(tbl, sep, f, i, j, iter)
 	local out = {}
 
 	sep = sep or ""
@@ -28,7 +32,7 @@ table.fconcat = function(tbl, sep, f, i, j)
 	i, j = (i or 1), (j or #tbl)
 
 	local counter = 1
-	for k, v in next, tbl do
+	for k, v in (iter or pairs)(tbl) do
 		if type(k) ~= "number" or (k >= i and k <= j) then
 			if f then
 				out[counter] = f(k, v)
