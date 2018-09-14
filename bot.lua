@@ -631,6 +631,7 @@ do
 	envTfm.string.pad = nil
 	envTfm.string.pack = nil
 	envTfm.tfm.get.room.playerList["Pikashu#0001"] = envTfm.tfm.get.room.playerList["Tigrounette#0001#0001"]
+	envTfm._G = envTfm
 end
 
 do
@@ -793,6 +794,10 @@ do
 			return base64.encode(table.concat(out))
 		end
 
+		self.getToken_Date = function(self)
+			return this.cookies.token_date / 1000
+		end
+
 		self.getUsername = function(self)
 			return this.username
 		end
@@ -814,7 +819,11 @@ do
 			return self.getUsername(self) ~= ""
 		end
 		
-		self.login = function(self, username, password)
+		self.login = function(self, username, password, reconnect)
+			if reconnect then
+				this.username = ""
+			end
+
 			if self.isConnected(self) then
 				print("[ERROR] You are already logged in the account [" .. this.username .. "].")
 				return false
@@ -1461,7 +1470,7 @@ commands["modules"] = {
 			if not search.pattern and not filter then
 				search.pattern = parameters
 			end
-			if not validPattern(message, body, search.pattern) then return end
+			if search.pattern and not validPattern(message, body, search.pattern) then return end
 		end
 		
 		local list, counter = { }, 0
@@ -1761,14 +1770,23 @@ commands["tree"] = {
 	syntax = prefix .. "tree [path]",
 	fn = function(message, parameters)
 		local src, pathExists = envTfm, true
+		local indexName
+
 		if parameters and #parameters > 0 then
 			for p in string.gmatch(parameters, "[^%.]+") do
+				if type(src) ~= "table" then
+					pathExists = false
+					break
+				end
+
 				p = tonumber(p) or p
 				src = src[p]
 
 				if not src then
 					pathExists = false
 					break
+				elseif type(src) ~= "table" then
+					indexName = p
 				end
 			end
 
@@ -1785,10 +1803,16 @@ commands["tree"] = {
 			end
 		end
 
-		local sortedSrc, counter = { }, 0
-		for k, v in next, src do
-			counter = counter + 1
-			sortedSrc[counter] = { k, tostring(v), type(v) }
+		local sortedSrc = { }
+
+		if type(src) == "table" then
+			local counter = 0
+			for k, v in next, src do
+				counter = counter + 1
+				sortedSrc[counter] = { k, tostring(v), type(v) }
+			end
+		else
+			sortedSrc[1] = { tostring(indexName), tostring(src), type(src) }
 		end
 		table.sort(sortedSrc, function(value1, value2)
 			if value1[3] == "number" and value2[3] == "number" then
@@ -1918,6 +1942,10 @@ commands["upload"] = {
 			return
 		end
 
+		if string.sub(parameters, 1, 13) == "https://imgur" then -- imgur doesn't redirect to i.imgur in the request
+			parameters = string.gsub(parameters, "/imgur", "/i.imgur", 1)
+		end
+
 		local foo, image = http.request("GET", parameters)
 		if not image then
 			toDelete[message.id] = channel:send({
@@ -1975,10 +2003,12 @@ commands["upload"] = {
 }
 
 --[[ Events ]]--
+local ini_time
 client:on("ready", function()
 	forumClient = forum()
 
 	forumClient:login(account.username, account.password)
+	ini_time = os.time() + 3600 * 10
 
 	local moons = io.open("Info/Others/avatar", 'r')
 	local counter = 0
@@ -2425,8 +2455,9 @@ local minutes, hours = 0, 0
 local clockMin = function()
 	minutes = minutes + 1
 
-	if not forumClient:isConnected() then -- reconnection
-		forumClient:login(account.username, account.password)
+	if not forumClient:isConnected() or (os.time() > forumClient:getToken_Date()) or (os.time() > ini_time) then -- reconnection
+		forumClient:login(account.username, account.password, true)
+		ini_time = os.time() + 3600 * 10 -- updates every 10h
 	elseif minutes == 1 then
 		updateLayout()
 	end
