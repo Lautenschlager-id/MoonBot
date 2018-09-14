@@ -10,10 +10,6 @@ do
 	end
 end
 
-math.clamp = function(value, min, max)
-	return value < min and min or value > max and max or value
-end
-
 os.readFile = function(file, format)
 	file = io.open(file, "r")
 	
