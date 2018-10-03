@@ -4,6 +4,8 @@ do
 	end
 
 	encodeUrl = function(url)
+		if not url then return "" end -- assert(url, "[Encode] Invalid url.")
+
 		url = string.gsub(url, "([^%w ])", toHex)
 		url = string.gsub(url, " ", "+")
 		return url
