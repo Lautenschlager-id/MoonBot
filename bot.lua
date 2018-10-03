@@ -5,7 +5,7 @@ discordia.extensions()
 local client = discordia.Client({
 	cacheAllMembers = true
 })
-
+client._options.routeDelay = 0
 local clock = discordia.Clock()
 
 --[[ Lib ]]--
@@ -54,13 +54,11 @@ local pairsByIndexes = function(list,f)
 		out[#out + 1] = index
 	end
 	table.sort(out, f)
-	
+
 	local i = 0
 	return function()
 		i = i + 1
-		if out[i] == nil then
-			return nil
-		else
+		if out[i] ~= nil then
 			return out[i], list[out[i]]
 		end
 	end
@@ -69,6 +67,11 @@ end
 require("Content/functions")
 
 --[[ System ]]--
+local owners = {
+	["285878295759814656"] = true, -- Bolo
+	["162919786358112256"] = true, -- Jordy
+}
+
 math.randomseed(os.time())
 local forumClient
 
@@ -102,10 +105,11 @@ local channels = {
 	flood = os.readFile("Info/Channel/flood", "*l"),
 	notifications = os.readFile("Info/Channel/notifications", "*l"),
 	logs = os.readFile("Info/Channel/logs", "*l"),
+	bot_logs = "490515118820687884" -- Another guild
 }
 local roles = {
 	dev = os.readFile("Info/Role/dev", "*l"),
-	helper = os.readFile("Info/Role/helper", "*l"),	
+	helper = os.readFile("Info/Role/helper", "*l"),
 }
 
 local botNames = { "Jerry", "ModuleAPI", "MoonAPI", "Moon", "FroggyJerry", "MoonForMice", "MoonduleAPI", "MoonBot", "ModuleBot", "JerryForMice", "JerryForMoon", "MoonPie" }
@@ -178,7 +182,7 @@ local toDelete = setmetatable({}, {
 })
 
 local hasPermission = function(member, roleId)
-	if member.id == client.owner.id then -- test purpose
+	if owners[member.id] then -- test purpose
 		return true
 	end
 
@@ -265,7 +269,37 @@ do
 		error = emptyFunction,
 		getmetatable = getmetatable,
 		ipairs = ipairs,
-		math = table.copy(math),
+		math = {
+			abs = math.abs,
+			acos = math.acos,
+			asin = math.asin,
+			atan = math.atan,
+			atan2 = math.atan2,
+			ceil = math.ceil,
+			cos = math.cos,
+			cosh = math.cosh,
+			deg = math.deg,
+			exp = math.exp,
+			floor = math.floor,
+			fmod = math.fmod,
+			frexp = math.frexp,
+			huge = math.huge,
+			ldexp = math.ldexp,
+			log = math.log,
+			max = math.max,
+			min = math.min,
+			modf = math.modf,
+			pi = math.pi,
+			pow = math.pow,
+			rad = math.rad,
+			random = math.random,
+			randomseed = math.randomseed,
+			sin = math.sin,
+			sinh = math.sinh,
+			sqrt = math.sqrt,
+			tan = math.tan,
+			tanh = math.tanh
+		},
 		next = next,
 		os = {
 			date = os.date,
@@ -281,7 +315,22 @@ do
 		rawset = rawset,
 		select = select,
 		setmetatable = setmetatable,
-		string = table.copy(string),
+		string = {
+			byte = string.byte,
+			char = string.char,
+			dump = string.dump,
+			find = string.find,
+			format = string.format,
+			gmatch = string.gmatch,
+			gsub = string.gsub,
+			len = string.len,
+			lower = string.lower,
+			match = string.match,
+			rep = string.rep,
+			reverse = string.reverse,
+			sub = string.sub,
+			upper = string.upper
+		},
 		system = {
 			bindKeyboard = emptyFunction,
 			bindMouse = emptyFunction,
@@ -446,6 +495,7 @@ do
 				addPhysicObject = emptyFunction,
 				addShamanObject = emptyFunction,
 				bindKeyboard = emptyFunction,
+				changePlayerSize = emptyFunction,
 				chatMessage = emptyFunction,
 				disableAfkDeath = emptyFunction,
 				disableAllShamanSkills = emptyFunction,
@@ -457,19 +507,23 @@ do
 				disableMinimalistMode = emptyFunction,
 				disableMortCommand = emptyFunction,
 				disablePhysicalConsumables = emptyFunction,
+				disablePrespawnPreview = emptyFunction,
 				disableWatchCommand = emptyFunction,
 				displayParticle = emptyFunction,
 				explosion = emptyFunction,
 				giveCheese = emptyFunction,
 				giveConsumables = emptyFunction,
 				giveMeep = emptyFunction,
+				giveTransformations = emptyFunction,
 				killPlayer = emptyFunction,
+				linkMice = emptyFunction,
 				lowerSyncDelay = emptyFunction,
 				moveObject = emptyFunction,
 				movePlayer = emptyFunction,
 				newGame = emptyFunction,
 				playEmote = emptyFunction,
 				playerVictory = emptyFunction,
+				removeCheese = emptyFunction,
 				removeImage = emptyFunction,
 				removeJoint = emptyFunction,
 				removeObject = emptyFunction,
@@ -482,6 +536,7 @@ do
 				setRoomMaxPlayers = emptyFunction,
 				setRoomPassword = emptyFunction,
 				setShaman = emptyFunction,
+				setShamanMode = emptyFunction,
 				setUIMapName = emptyFunction,
 				setUIShamanName = emptyFunction,
 				setVampirePlayer = emptyFunction,
@@ -489,8 +544,8 @@ do
 			},
 			get = {
 				misc = {
-					apiVersion = 0.26,
-					transformiceVersion = 5.81
+					apiVersion = 0.27,
+					transformiceVersion = 5.86
 				},
 				room = {
 					community = "en",
@@ -520,11 +575,13 @@ do
 					playerList = {
 						["Tigrounette#0001"] = {
 							community = "en",
+							gender = 0,
 							hasCheese = false,
 							id = 0,
 							inHardMode = 0,
 							isDead = true,
 							isFacingRight = true,
+							isInvoking = false,
 							isJumping = false,
 							isShaman = false,
 							isVampire = false,
@@ -535,7 +592,11 @@ do
 							registrationDate = 0,
 							score = 0,
 							shamanMode = 0,
+							spouseId = 0,
+							spouseName = "Melibelulle#0001",
 							title = 0,
+							tribeId = 0,
+							tribeName = "Les Populaires",
 							vx = 0,
 							vy = 0,
 							x = 0,
@@ -581,6 +642,7 @@ do
 		eventPlayerDied = emptyFunction,
 		eventPlayerGetCheese = emptyFunction,
 		eventPlayerLeft = emptyFunction,
+		eventPlayerMeep = emptyFunction,
 		eventPlayerVampire = emptyFunction,
 		eventPlayerWon = emptyFunction,
 		eventPlayerRespawn = emptyFunction,
@@ -614,23 +676,7 @@ do
 			return trim(bit.bor(bit.rshift(x, disp), bit.lshift(x, (32 - disp))))
 		end
 	end
-	envTfm.math.log10 = nil
-	envTfm.math.round = nil
-	envTfm.math.percent = nil
-	envTfm.math.clamp = nil
-	envTfm.string.endswith = nil
-	envTfm.string.packsize = nil
-	envTfm.string.superTrim = nil
-	envTfm.string.nickname = nil
-	envTfm.string.split = nil
-	envTfm.string.startswith = nil
-	envTfm.string.levenshtein = nil
-	envTfm.string.random = nil
-	envTfm.string.trim = nil
-	envTfm.string.unpack = nil
-	envTfm.string.pad = nil
-	envTfm.string.pack = nil
-	envTfm.tfm.get.room.playerList["Pikashu#0001"] = envTfm.tfm.get.room.playerList["Tigrounette#0001#0001"]
+	envTfm.tfm.get.room.playerList["Pikashu#0001"] = envTfm.tfm.get.room.playerList["Tigrounette#0001"]
 	envTfm._G = envTfm
 end
 
@@ -709,6 +755,7 @@ local removeHtmlFormat = function(str)
 	end)
 	str = string.gsub(str, '<a href="(.-)".->(.-)</a>', "[%2](%1)")
 	str = string.gsub(str, "<br />", "\n")
+	str = string.gsub(str, "<hr />", '')
 	str = string.gsub(str, "&gt;", '>')
 	str = string.gsub(str, "&lt;", '<')
 	str = string.gsub(str, "&quot;", "\"")
@@ -818,7 +865,7 @@ do
 		self.isConnected = function(self)
 			return self.getUsername(self) ~= ""
 		end
-		
+
 		self.login = function(self, username, password, reconnect)
 			if reconnect then
 				this.username = ""
@@ -873,6 +920,9 @@ do
 
 		self.page = function(self, pageName, postData, ajax, keyLocation, fileBody)
 			local keys = self.getKeys(self, keyLocation or ajax)
+			if #keys == 0 then
+				return commands["refresh"].fn()
+			end
 
 			local headers = self.headers(self)
 			if ajax then
@@ -922,7 +972,7 @@ do
 					local eq = string.find(cookie, '=')
 					local cookieName = string.sub(cookie, 1, eq - 1)
 
-					
+
 					if this.getInfo < 2 or (cookieName ~= "JSESSIONID" and cookieName ~= "token" and cookieName ~= "token_date") then
 						this.cookies[cookieName] = string.sub(cookie, eq + 1)
 					end
@@ -978,13 +1028,15 @@ local alias = {
 	["deny"] = "reject",
 	['i'] = "upload",
 	["img"] = "upload",
+	["info"] = "help",
 	["lua"] = "tree",
 	['m'] = "members",
 	["message"] = "mobile",
 	["pm"] = "mobile",
 	["reminder"] = "remind",
 	["rooms"] = "modules",
-	["say"] = "remind"
+	["say"] = "remind",
+	["server"] = "serverinfo"
 }
 
 -- description => Description of the command, appears in !help
@@ -1014,6 +1066,7 @@ commands["adoc"] = {
 				description = string.gsub(description, "&gt;", ">")
 				description = string.gsub(description, "&lt;", "<")
 				description = string.gsub(description, "&quot;", "\"")
+				description = string.gsub(description, "&amp;", "&")
 				description = string.gsub(description, "&#(%d+)", function(dec) return string.char(dec) end)
 
 				local info = {
@@ -1224,7 +1277,7 @@ commands["eval"] = {
 
 		if string.find(parameters, '`') then
 			local _
-			_, parameters = string.match(parameters, "`(`?`?)(.*)%1`")		
+			_, parameters = string.match(parameters, "`(`?`?)(.*)%1`")
 
 			if parameters then
 				local hasLuaTag, final = string.find(string.lower(parameters), "^lua\n+")
@@ -1296,7 +1349,7 @@ commands["help"] = {
 	fn = function(message, parameters)
 		if parameters and #parameters > 0 then
 			parameters = string.lower(parameters)
-			
+
 			parameters = alias[parameters] or parameters
 			if commands[parameters] and not commands[parameters].sys then
 				local aliases, counter = { }, 0
@@ -1472,7 +1525,7 @@ commands["modules"] = {
 			end
 			if search.pattern and not validPattern(message, body, search.pattern) then return end
 		end
-		
+
 		local list, counter = { }, 0
 
 		string.gsub(body, '<tr><td><img src="https://atelier801%.com/img/pays/(..)%.png" alt="https://atelier801%.com/img/pays/%1%.png" class="inline%-block img%-ext" style="float:;" /></td><td>     </td><td><span .->(#%S+)</span>.-</td><td>     </td><td><span .->(%S+)</span></td><td>     </td><td><span .->(%S+)</span></td> 	</tr>', function(community, module, level, hoster)
@@ -1506,7 +1559,7 @@ commands["modules"] = {
 				embed = {
 					color = color.fail,
 					title = "<:wheel:456198795768889344> Modules",
-					description = "there are no modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == 0 and "semi-official" or "official") .. "]") or "") .. (search.pattern and (" with the pattern **`" .. tostring(search.pattern) .. "`**.") or ".")
+					description = "There are no modules " .. (search.commu and ("made by a(n) [:flag_" .. search.commu .. ":] **" .. string.upper(search.commu) .. "** ") or "") .. (search.player and ("made by **" .. search.player .. "** ") or "") .. (search.type and ("that are [" .. (search.type == 0 and "semi-official" or "official") .. "]") or "") .. (search.pattern and (" with the pattern **`" .. tostring(search.pattern) .. "`**.") or ".")
 				}
 			})
 		else
@@ -1558,7 +1611,7 @@ commands["quote"] = {
 						description = (msg.embed and msg.embed.description) or msg.content,
 
 						footer = {
-							text = "In #" .. msg.channel.name
+							text = "In " .. (msg.channel.category and (msg.channel.category.name .. ".") or "")  .. "#" .. msg.channel.name,
 						},
 						timestamp = string.gsub(msg.timestamp, " ", ""),
 					}
@@ -1728,6 +1781,73 @@ commands["reply"] = {
 				})
 			end
 		end
+	end
+}
+commands["serverinfo"] = {
+	description = "Displays cool informations about the server.",
+	syntax = prefix .. "serverinfo",
+	fn = function(message)
+		local members = message.guild.members
+
+		local bots = members:count(function(member) return member.bot end)
+
+		toDelete[message.id] = message:reply({
+			content = "<@" .. message.author.id .. ">",
+			embed = {
+				color = color.info,
+
+				author = {
+					name = message.guild.name,
+					icon_url = message.guild.iconURL
+				},
+
+				thumbnail = { url = "https://i.imgur.com/Lvlrhot.png" },
+
+				fields = {
+					[1] = {
+						name = ":computer: ID",
+						value = message.guild.id,
+						inline = true
+					},
+					[2] = {
+						name = ":crown: Owner",
+						value = "<@" .. message.guild.ownerId .. ">",
+						inline = true
+					},
+					[3] = {
+						name = ":speech_balloon: Channels",
+						value = ":pencil2: Text: " .. #message.guild.textChannels .. "\n:speaker: Voice: " .. #message.guild.voiceChannels .. "\n:card_box: Category: " .. #message.guild.categories,
+						inline = true
+					},
+					[4] = {
+						name = ":calendar: Created at",
+						value = os.date("%Y-%m-%d %I:%M%p", message.guild.createdAt),
+						inline = true
+					},
+					[5] = {
+						name = ":family_mmgb: Members",
+						value = string.format("<:online:456197711356755980> Online: %s | <:idle:456197711830581249> Away: %s | <:dnd:456197711251636235> Busy: %s | <:offline:456197711457419276> Offline: %s\n\n:raising_hand: **Total:** %s\n\n<:lua:483421987499147292> **Devs Lua**: %s\n<:akinator:456196251743027200> **Helpers**: %s\n<:jerry:484137634483142667> **Funcorps**: %s\n<:atelier:458403092417740824> **Admins**: %s\n\n:robot: **Bots**: %s", members:count(function(member)
+							return member.status == "online"
+						end), members:count(function(member)
+							return member.status == "idle"
+						end), members:count(function(member)
+							return member.status == "dnd"
+						end), members:count(function(member)
+							return member.status == "offline"
+						end), message.guild.totalMemberCount - bots, members:count(function(member)
+							return member:hasRole("190845564940845056") -- devlua
+						end), members:count(function(member)
+							return member:hasRole("203570211205414912") or member:hasRole("228169003678433280") -- helper / ahelper
+						end), members:count(function(member)
+							return member:hasRole("279752481620099073") -- funcorp
+						end), members:count(function(member)
+							return member:hasRole("197765650398183424") -- admin
+						end), bots),
+						inline = false
+					},
+				},
+			}
+		})
 	end
 }
 commands["terms"] = {
@@ -1914,7 +2034,7 @@ commands["upload"] = {
 						description = "The link provided is not a valid imgur album.\n```\n" .. parameters .. "```"
 					}
 				})
-			end		
+			end
 			return
 		end
 
@@ -2076,7 +2196,7 @@ local messageCreate = function(message)
 			end
 			return
 		end
-		
+
 		if commands[command].connection then
 			if not forumClient or not forumClient:isConnected() then
 				toDelete[message.id] = message:reply({
@@ -2128,13 +2248,13 @@ local reactionAdd = function(cached, channel, messageId, emojiName, userId)
 			message:removeReaction(emojiName, userId)
 			return
 		end
-	
+
 		if message.embed then
 			local confirmation = string.find(message.embed.title or "", "Confirmation")
 			if confirmation then
 				local user, state = string.match(message.content, "^<@!?(%d+)> | ([01])$")
 				if user ~= userId then return end
-				
+
 				local member = message.guild:getMember(user)
 				if member then
 					if emojiName == reactions.Y then
@@ -2201,11 +2321,11 @@ end)
 client:on("reactionAddUncached", function(channel, messageId, emojiName, userId)
 	local success, err = pcall(reactionAdd, true, channel, messageId, emojiName, userId)
 	if not success then
-		toDelete[messageId] = channel:send({
+		client:getChannel(channels.bot_logs):send({
 			embed = {
 				color = color.error,
 				title = "evt@ReactionAddU => Fatal Error!",
-				description = "```\n" .. err .. "```"
+				description = "Message: " .. tostring(messageId) .. "\n```\n" .. err .. "```"
 			}
 		})
 	end
@@ -2214,11 +2334,11 @@ client:on("reactionAdd", function(reaction, userId)
 	-- Parameters are normalized to both Uncached and Cached messages trigger reactionAdd correctly
 	local success, err = pcall(reactionAdd, false, reaction.message.channel, reaction.message.id, reaction.emojiName, userId)
 	if not success then
-		toDelete[reaction.message.id] = reaction.message:reply({
+		client:getChannel(channels.bot_logs):send({
 			embed = {
 				color = color.error,
 				title = "evt@ReactionAdd => Fatal Error!",
-				description = "```\n" .. err .. "```"
+				description = "Message: " .. tostring(reaction.message.id) .. "\n```\n" .. err .. "```"
 			}
 		})
 	end
@@ -2248,7 +2368,7 @@ end
 client:on("memberJoin", function(member)
 	local success, err = pcall(memberJoin, member)
 	if not success then
-		message:reply({
+		client:getChannel(channels.bot_logs):send({
 			embed = {
 				color = color.error,
 				title = "evt@MemberJoin => Fatal Error!",
@@ -2260,7 +2380,7 @@ end)
 client:on("memberLeave", function(member)
 	local success, err = pcall(memberLeave, member)
 	if not success then
-		message:reply({
+		client:getChannel(channels.bot_logs):send({
 			embed = {
 				color = color.error,
 				title = "evt@MemberLeave => Fatal Error!",
@@ -2456,11 +2576,14 @@ local clockMin = function()
 	minutes = minutes + 1
 
 	if not forumClient:isConnected() or (os.time() > forumClient:getToken_Date()) or (os.time() > ini_time) then -- reconnection
+		-- Unsolved error, I guess this if spammed the error logs. Probably the reconnection thing is broken.
 		forumClient:login(account.username, account.password, true)
 		ini_time = os.time() + 3600 * 10 -- updates every 10h
 	elseif minutes == 1 then
 		updateLayout()
 	end
+
+	if not forumClient:isConnected() then return end
 
 	if minutes == 1 or minutes % 15 == 0 then
 		checkPrivateMessages()
@@ -2481,28 +2604,48 @@ local clockHour = function()
 	updateLayout()
 end
 
+local handleError = {
+	min = false,
+	hour = false
+}
 clock:on("min", function()
 	local success, err = pcall(clockMin)
 	if not success then
-		client:getChannel(channels.flood):send({ -- #flood channel
+		if handleError.min then
+			return commands["refresh"].fn()
+		else
+			handleError.min = true
+		end
+
+		client:getChannel(channels.bot_logs):send({ -- #flood channel
 			embed = {
 				color = color.error,
 				title = "clock@Minute => Fatal Error!",
 				description = "```\n" .. err .. "```"
 			}
 		})
+	else
+		handleError.min = false
 	end
 end)
 clock:on("hour", function()
 	local success, err = pcall(clockHour)
 	if not success then
-		client:getChannel(channels.flood):send({ -- #flood channel
+		if handleError.hour then
+			return commands["refresh"].fn()
+		else
+			handleError.hour = true
+		end
+
+		client:getChannel(channels.bot_logs):send({ -- #flood channel
 			embed = {
 				color = color.error,
 				title = "clock@Hour => Fatal Error!",
 				description = "```\n" .. err .. "```"
 			}
 		})
+	else
+		handleError.hour = false
 	end
 end)
 
