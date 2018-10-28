@@ -105,7 +105,9 @@ local channels = {
 	flood = os.readFile("Info/Channel/flood", "*l"),
 	notifications = os.readFile("Info/Channel/notifications", "*l"),
 	logs = os.readFile("Info/Channel/logs", "*l"),
-	bot_logs = "490515118820687884" -- Another guild
+	sharpie = os.readFile("Info/Channel/sharpie", "*l"),
+	bot_logs = "490515118820687884", -- Another guild
+	bridge = "499635964503785533"
 }
 local roles = {
 	dev = os.readFile("Info/Role/dev", "*l"),
@@ -115,7 +117,7 @@ local roles = {
 local botNames = { "Jerry", "ModuleAPI", "MoonAPI", "Moon", "FroggyJerry", "MoonForMice", "MoonduleAPI", "MoonBot", "ModuleBot", "JerryForMice", "JerryForMoon", "MoonPie" }
 local botAvatars = { }
 local botStatus = {
-	{ "online", { "I'm ready to be used!", "Yoohoo", "LUA or Phyton, that's the question", ":jerry", "Ping @Pikashu", "Atelier801 Forums" } },
+	{ "online", { "I'm ready to be used!", "Yoohoo", "LUA or Phyton, that's the question", ":jerry:", "Ping @Pikashu", "Atelier801 Forums" } },
 	{ "idle", { "Waiting Pikashu to update the API", "Waiting my Java application to compile", "Pong @Streaxx", "AAAAA i don't work the way i should", "Editing TFM API", "Checking the moon" } },
 	{ "dnd", { "Taking shower BRB", "I am stressed, do /moon", "My disk is almost full", "Reading applications", "Marriage proposal to Sharpiebot" } }
 }
@@ -1067,6 +1069,7 @@ commands["adoc"] = {
 				description = string.gsub(description, "&lt;", "<")
 				description = string.gsub(description, "&quot;", "\"")
 				description = string.gsub(description, "&amp;", "&")
+				description = string.gsub(description, "&pi;", "π")
 				description = string.gsub(description, "&#(%d+)", function(dec) return string.char(dec) end)
 
 				local info = {
@@ -1156,7 +1159,7 @@ commands["apps"] = {
 					end
 				end
 
-				return (value.isNew and "`NEW` " or "") .. ":envelope: [**" .. value.playerName .. "**](https://atelier801.com/" .. value.url .. ") " .. (#res > 0 and ("≈ " .. table.concat(res, " | ") .. (value.n > 2 and " - :x:" or value.y > 6 and " - :white_check_mark:" or "")) or "")
+				return ((value.isNew or (value.difftime and value.difftime < 4)) and "`NEW` " or ((value.difftime and ((value.difftime > 30 and ":warning: " or "") .. value.difftime .. "d ") or ""))) .. ":envelope: [**" .. value.playerName .. "**](https://atelier801.com/" .. value.url .. ") " .. (#res > 0 and ("≈ " .. table.concat(res, " | ") .. (value.n > 2 and " - :x:" or ((value.y > 5 and value.n == 0) or value.y > 6) and " - :white_check_mark:" or "")) or "")
 			end))
 
 			local msgs = { }
@@ -1212,7 +1215,7 @@ commands["doc"] = {
 		local header, body = http.request("GET", "http://www.lua.org/work/doc/manual.html")
 
 		if body then
-			local syntax, description = string.match(body, "<a name=\"pdf%-" .. parameters .. "\"><code>(.-)</code></a></h3>[\n<p>]*(.-)<hr>")
+			local syntax, description = string.match(body, "<a name=\"pdf%-" .. parameters .. "\"><code>(.-)</code></a></h3>[\n<p>]*(.-)<h[r2]>")
 
 			if syntax then
 				-- Normalizing tags
@@ -1610,8 +1613,15 @@ commands["quote"] = {
 						},
 						description = (msg.embed and msg.embed.description) or msg.content,
 
+						fields = {
+							{
+								name = "Link",
+								value = "[Click here](" .. msg.link .. ")"
+							}
+						},
+
 						footer = {
-							text = "In " .. (msg.channel.category and (msg.channel.category.name .. ".") or "")  .. "#" .. msg.channel.name,
+							text = "In " .. (msg.channel.category and (msg.channel.category.name .. ".#") or "#") .. msg.channel.name,
 						},
 						timestamp = string.gsub(msg.timestamp, " ", ""),
 					}
@@ -1978,6 +1988,16 @@ commands["upload"] = {
 	syntax = prefix .. "upload link / imgur album / image",
 	connection = true,
 	fn = function(message, parameters, get)
+		local mt_member, shades_requester -- shades_requester when someone from 50shades get approval to have the image hosted.
+		if message.channel.id == channels.bridge and not get then
+			local _, final, mt, my = string.find(parameters, "`(%d+)|(%d+)`")
+			mt_member = mt
+			shades_requester = my
+			parameters = string.sub(parameters, final + 2)
+		else
+			mt_member = message.author.id
+		end
+	
 		local img = message.attachment and message.attachment.url
 		if not img then
 			if not hasParam(message, parameters) then return end
@@ -2009,7 +2029,7 @@ commands["upload"] = {
         
 					if image == 1 then
 						refMessage = channel:send({
-							content = "<@!" .. message.author.id .. ">",
+							content = "<@!" .. mt_member .. ">",
 							embed = {
 								color = color.success,
 								title = (len > 0 and ":warning: " or "") .. "<:atelier:458403092417740824> Image album upload [ 1 / " .. counter .. " ]",
@@ -2023,17 +2043,31 @@ commands["upload"] = {
 					end
 				end
         
-				message.author:send({ embed = refMessage.embed })
+				client:getUser(mt_member):send({ embed = refMessage.embed })
+				if shades_requester then
+					client:getChannel(channels.bridge):send({
+						content = shades_requester,
+						embed = refMessage.embed
+					})
+				end
 				message:delete()
 			else
+				local embed = {
+					color = color.fail,
+					title = "<:imgur:485536726794764299> Invalid imgur album",
+					description = "The link provided is not a valid imgur album.\n```\n" .. parameters .. "```"
+				}
+
 				toDelete[message.id] = channel:send({
-					content = "<@!" .. message.author.id .. ">",
-					embed = {
-						color = color.fail,
-						title = "<:imgur:485536726794764299> Invalid imgur album",
-						description = "The link provided is not a valid imgur album.\n```\n" .. parameters .. "```"
-					}
+					content = "<@!" .. mt_member .. ">",
+					embed = embed
 				})
+				if shades_requester then
+					client:getChannel(channels.bridge):send({
+						content = shades_requester,
+						embed = embed
+					})
+				end
 			end
 			return
 		end
@@ -2051,14 +2085,22 @@ commands["upload"] = {
 		end
 
 		if not extension then
+			local embed = {
+				color = color.fail,
+				title = "<:atelier:458403092417740824> Invalid link",
+				description = "The link provided is not a valid image.\n```\n" .. parameters .. "```"
+			}
+
 			toDelete[message.id] = channel:send({
-				content = "<@!" .. message.author.id .. ">",
-				embed = {
-					color = color.fail,
-					title = "<:atelier:458403092417740824> Invalid link",
-					description = "The link provided is not a valid image.\n```\n" .. parameters .. "```"
-				}
+				content = "<@!" .. mt_member .. ">",
+				embed = embed
 			})
+			if shades_requester then
+				client:getChannel(channels.bridge):send({
+					content = shades_requester,
+					embed = embed
+				})
+			end
 			return
 		end
 
@@ -2068,19 +2110,27 @@ commands["upload"] = {
 
 		local foo, image = http.request("GET", parameters)
 		if not image then
+			local embed = {
+				color = color.fail,
+				title = "<:atelier:458403092417740824> Invalid image",
+				description = "The link provided could not be uploaded.\n```\n" .. tostring(foo) .. "```\n```\n" .. parameters .. "```"
+			}
+
 			toDelete[message.id] = channel:send({
-				content = "<@!" .. message.author.id .. ">",
-				embed = {
-					color = color.fail,
-					title = "<:atelier:458403092417740824> Invalid image",
-					description = "The link provided could not be uploaded.\n```\n" .. tostring(foo) .. "```\n```\n" .. parameters .. "```"
-				}
+				content = "<@!" .. mt_member .. ">",
+				embed = embed
 			})
+			if shades_requester then
+				client:getChannel(channels.bridge):send({
+					content = shades_requester,
+					embed = embed
+				})
+			end
 			return
 		end
 
 		local link = imageHost.link .. encodeUrl(account.username)
-		local body = forumClient:hostImage(link, message.author.id, image, extension)
+		local body = forumClient:hostImage(link, mt_member, image, extension)
 		if string.sub(body, 3, 13) == "redirection" then
 			local list = forumClient:getPage(link)
 
@@ -2097,23 +2147,37 @@ commands["upload"] = {
 				}
 
 				channel:send({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@!" .. mt_member .. ">",
 					embed = embed
 				})
-				message.author:send({ embed = embed })
+				client:getUser(mt_member):send({ embed = embed })
+				if shades_requester then
+					client:getChannel(channels.bridge):send({
+						content = shades_requester,
+						embed = embed
+					})
+				end
 			end
 		else
 			if get then
 				return parameters, true
 			else
+				local embed = {
+					color = color.fail,
+					title = "<:atelier:458403092417740824> Image upload",
+					description = "Failure trying to upload the image **" .. parameters .. "**\n```\n" .. tostring(body) .. "```"
+				}
+
 				toDelete[message.id] = channel:send({
-					content = "<@!" .. message.author.id .. ">",
-					embed = {
-						color = color.fail,
-						title = "<:atelier:458403092417740824> Image upload",
-						description = "Failure trying to upload the image **" .. parameters .. "**\n```\n" .. tostring(body) .. "```"
-					}
+					content = "<@!" .. mt_member .. ">",
+					embed = embed
 				})
+				if shades_requester then
+					client:getChannel(channels.bridge):send({
+						content = shades_requester,
+						embed = embed
+					})
+				end
 				return
 			end
 		end
@@ -2142,6 +2206,25 @@ client:on("ready", function()
 end)
 
 local messageCreate = function(message)
+	-- Ignore its own messages
+	if message.author.id == client.user.id then return end
+
+	if message.author.id == "185432774314819584" then
+		return message:delete()
+	end
+
+	-- Bridge
+	if message.channel.id == channels.bridge then
+		if string.sub(message.content, 1, 2) == "%p" then
+			client:getChannel(channels.sharpie):send(message.content)
+			message:delete()
+		elseif string.sub(message.content, 1, 7) == "!upload" then
+			commands["upload"].fn(message, string.sub(message.content, 9))
+			message:delete()
+		end
+		return
+	end
+
 	-- Skips bot messages
 	if message.author.bot then return end
 
@@ -2183,6 +2266,8 @@ local messageCreate = function(message)
 	-- Function call
 	command = alias[command] or command
 	if commands[command] then
+		message.channel:broadcastTyping()
+
 		if not hasPermission(message.member, (commands[command].highlevel and roles.helper or roles.dev)) then
 			if not commands[command].sys then
 				toDelete[message.id] = message:reply({
@@ -2493,6 +2578,8 @@ local checkApplications = function()
 			end)
 		end
 
+		local difftime = tonumber(string.match(topic, 'data%-afficher%-secondes="false">(%d+)</span>', 1))
+
 		counter = counter + 1
 		list[counter] = {
 			url = applications[application][2],
@@ -2500,7 +2587,8 @@ local checkApplications = function()
 			y = yeses,
 			n = nos,
 			unkn = unknowns,
-			isNew = new
+			isNew = new,
+			difftime = difftime and math.ceil((os.time() - (difftime / 1000)) / 60 / 60 / 24) or nil
 		}
 	end
 
@@ -2513,6 +2601,7 @@ local checkPrivateMessages = function()
 	if not forumClient:isConnected() then return end
 
 	local body = forumClient:getPage("conversations")
+	if not body then return end
 
 	local toCheck, counter = { }, 0
 	string.gsub(body, 'img18 espace%-2%-2" />  (.-) </a>.-nombre%-messages%-(.-)" href="(.-)">(%d+)<', function(title, messageState, url, totalReplies)
