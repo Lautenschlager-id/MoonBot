@@ -1992,7 +1992,7 @@ commands["upload"] = {
 		if message.channel.id == channels.bridge and not get then
 			local _, final, mt, my = string.find(parameters, "`(%d+)|(%d+)`")
 			mt_member = mt
-			shades_requester = my
+			shades_requester = ((my ~= mt or not client:getGuild("190844663660412928"):getMember(my)) and my or nil)
 			parameters = string.sub(parameters, final + 2)
 		else
 			mt_member = message.author.id
@@ -2017,8 +2017,8 @@ commands["upload"] = {
 			end)
         
 			if counter > 0 then
-				local len, refMessage = (counter <= 13 and 0 or counter <= 23 and 1 or 2)
-				for image = 1, math.min(counter, 50) do
+				local len, refMessage = (counter < 13 and 0 or counter < 17 and 1 or 2)
+				for image = 1, math.min(counter, 60) do
 					local code, failed = commands["upload"].fn(message, "https://i.imgur.com/" .. images[image], true)
         
 					local imgurMarkdown, atelierMarkdown = "**" .. images[image] .. "**", "**" .. code .. "**"
@@ -2046,7 +2046,7 @@ commands["upload"] = {
 				client:getUser(mt_member):send({ embed = refMessage.embed })
 				if shades_requester then
 					client:getChannel(channels.bridge):send({
-						content = shades_requester,
+						content = shades_requester .. "|" .. mt_member,
 						embed = refMessage.embed
 					})
 				end
@@ -2064,7 +2064,7 @@ commands["upload"] = {
 				})
 				if shades_requester then
 					client:getChannel(channels.bridge):send({
-						content = shades_requester,
+						content = shades_requester .. "|" .. mt_member,
 						embed = embed
 					})
 				end
@@ -2097,7 +2097,7 @@ commands["upload"] = {
 			})
 			if shades_requester then
 				client:getChannel(channels.bridge):send({
-					content = shades_requester,
+					content = shades_requester .. "|" .. mt_member,
 					embed = embed
 				})
 			end
@@ -2122,7 +2122,7 @@ commands["upload"] = {
 			})
 			if shades_requester then
 				client:getChannel(channels.bridge):send({
-					content = shades_requester,
+					content = shades_requester .. "|" .. mt_member,
 					embed = embed
 				})
 			end
@@ -2153,7 +2153,7 @@ commands["upload"] = {
 				client:getUser(mt_member):send({ embed = embed })
 				if shades_requester then
 					client:getChannel(channels.bridge):send({
-						content = shades_requester,
+						content = shades_requester .. "|" .. mt_member,
 						embed = embed
 					})
 				end
@@ -2174,7 +2174,7 @@ commands["upload"] = {
 				})
 				if shades_requester then
 					client:getChannel(channels.bridge):send({
-						content = shades_requester,
+						content = shades_requester .. "|" .. mt_member,
 						embed = embed
 					})
 				end
