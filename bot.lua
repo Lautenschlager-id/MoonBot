@@ -1159,7 +1159,7 @@ commands["apps"] = {
 					end
 				end
 
-				return ((value.isNew or (value.difftime and value.difftime < 4)) and "`NEW` " or ((value.difftime and ((value.difftime > 30 and ":warning: " or "") .. value.difftime .. "d ") or ""))) .. ":envelope: [**" .. value.playerName .. "**](https://atelier801.com/" .. value.url .. ") " .. (#res > 0 and ("≈ " .. table.concat(res, " | ") .. (value.n > 2 and " - :x:" or ((value.y > 5 and value.n == 0) or value.y > 6) and " - :white_check_mark:" or "")) or "")
+				return ((value.isNew or (value.difftime and value.difftime < 4)) and "`NEW` " or ((value.difftime and (((value.difftime > 99 and ":skull: ") or (value.difftime > 29 and ":warning: ") or "") .. value.difftime .. "d ") or ""))) .. ":envelope: [**" .. value.playerName .. "**](https://atelier801.com/" .. value.url .. ") " .. (#res > 0 and ("≈ " .. table.concat(res, " | ") .. (value.n > 2 and " - :x:" or ((value.y > 5 and value.n == 0) or value.y > 6) and " - :white_check_mark:" or "")) or "")
 			end))
 
 			local msgs = { }
