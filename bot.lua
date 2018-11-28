@@ -714,7 +714,7 @@ local applicationExists = function(playerName)
 end
 
 local htmlToMarkdown = function(str)
-	str = string.gsub(str, "&#(%d+)", function(dec) return string.char(dec) end)
+	str = string.gsub(str, "&#(%d+);", function(dec) return string.char(dec) end)
 	str = string.gsub(str, '<span style="(.-);">(.-)</span>', function(x, content)
 		local markdown = ""
 		if x == "font-weight:bold" then
@@ -993,7 +993,7 @@ end
 local hasParam = function(message, parameters)
 	if not parameters or #parameters == 0 then
 		toDelete[message.id] = message:reply({
-			content = "<@!" .. message.author.id .. ">",
+			content = "<@" .. message.author.id .. ">",
 			embed = {
 				color = color.fail,
 				title = "<:wheel:456198795768889344> Missing or invalid parameters.",
@@ -1009,7 +1009,7 @@ local validPattern = function(message, src, pattern)
 	local success, err = pcall(string.find, src, pattern)
 	if not success then
 		toDelete[message.id] = message:reply({
-			content = "<@!" .. message.author.id .. ">",
+			content = "<@" .. message.author.id .. ">",
 			embed = {
 				color = color.fail,
 				title = "<:atelier:458403092417740824> Invalid pattern.",
@@ -1031,14 +1031,17 @@ local alias = {
 	['i'] = "upload",
 	["img"] = "upload",
 	["info"] = "help",
+	["formula"] = "tex",
 	["lua"] = "tree",
 	['m'] = "members",
+	["math"] = "tex",
 	["message"] = "mobile",
 	["pm"] = "mobile",
 	["reminder"] = "remind",
 	["rooms"] = "modules",
 	["say"] = "remind",
-	["server"] = "serverinfo"
+	["server"] = "serverinfo",
+	["task"] = "tasks"
 }
 
 -- description => Description of the command, appears in !help
@@ -1118,7 +1121,7 @@ commands["adoc"] = {
 				end
 
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.info,
 						title = "<:atelier:458403092417740824> " .. syntax,
@@ -1128,7 +1131,7 @@ commands["adoc"] = {
 				})
 			else
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.info,
 						title = "<:atelier:458403092417740824> TFM API Documentation",
@@ -1249,7 +1252,7 @@ commands["doc"] = {
 				local toRem = { }
 				for i = 1, #lines do
 					toRem[i] = message:reply({
-						content = (i == 1 and "<@!" .. message.author.id .. ">" or nil),
+						content = (i == 1 and "<@" .. message.author.id .. ">" or nil),
 						embed = {
 							color = color.info,
 							title = (i == 1 and ("<:lua:483421987499147292> " .. syntax) or nil),
@@ -1261,7 +1264,7 @@ commands["doc"] = {
 				toDelete[message.id] = toRem
 			else
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.info,
 						title = "<:lua:483421987499147292> Lua Documentation",
@@ -1297,7 +1300,7 @@ commands["eval"] = {
 
 		if not parameters or #parameters == 0 then
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.fail,
 					title = "<:wheel:456198795768889344> Invalid parameters.",
@@ -1312,7 +1315,7 @@ commands["eval"] = {
 		local fn, err = load(parameters, '', 't', envTfm)
 		if not fn then
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.error,
 					title = "<:wheel:456198795768889344> Syntax failed.",
@@ -1323,7 +1326,7 @@ commands["eval"] = {
 		end
 
 		toDelete[message.id] = message:reply({
-			content = "<@!" .. message.author.id .. ">",
+			content = "<@" .. message.author.id .. ">",
 			embed = {
 				color = color.success,
 				title = "<:wheel:456198795768889344> Syntax checked sucessfully.",
@@ -1336,12 +1339,11 @@ commands["form"] = {
 	description = "Displays the application form link.",
 	fn = function(message)
 		toDelete[message.id] = message:reply({
-			content = "<@!" .. message.author.id .. ">",
+			content = "<@" .. message.author.id .. ">",
 			embed = {
 				color = color.info,
 				title = "<:atelier:458403092417740824> Application Form",
-				description = "**Application state** : <:online:456197711356755980>\n\n**URL** : https://goo.gl/ZJcnhZ",
-				timestamp = message.timestamp
+				description = "**Application state** : <:online:456197711356755980>\n\n**URL** : https://goo.gl/ZJcnhZ"
 			}
 		})
 	end
@@ -1364,16 +1366,16 @@ commands["help"] = {
 				end
 
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.info,
 						title = ":loudspeaker: Help ~> '" .. prefix .. parameters .. "'",
-						description = "**Must be connected on forums:** " .. string.upper(tostring(not not commands[parameters].connection)) .. "\n**Helper command:** " .. string.upper(tostring(not not commands[parameters].highlevel)) .. "\n\n**Description:** " .. commands[parameters].description .. (commands[parameters].syntax and ("\n\n**Syntax:** " .. commands[parameters].syntax) or "") .. (#aliases > 0 and ("\n\n**Aliases:** _" .. prefix .. table.concat(aliases, "_ , _" .. prefix) .. "_") or "")
+						description = "**Must be connected on forums:** " .. string.upper(tostring(not not commands[parameters].connection)) .. "\n**Helper command:** " .. string.upper(tostring(not not commands[parameters].highlevel)) .. "\n\n**Description:** " .. commands[parameters].description .. (commands[parameters].syntax and ("\n\n**Syntax:** " .. commands[parameters].syntax) or "") .. (#aliases > 0 and ("\n\n**Aliases:** *" .. prefix .. table.concat(aliases, "* , *" .. prefix) .. "*") or "")
 					}
 				})
 			else
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = ":loudspeaker: Help",
@@ -1383,7 +1385,7 @@ commands["help"] = {
 			end
 		else
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.info,
 					title = ":loudspeaker: General help",
@@ -1416,7 +1418,7 @@ commands["members"] = {
 
 		if #list == 0 then
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.info,
 					title = "<:lua:483421987499147292> Module Team Members",
@@ -1428,7 +1430,7 @@ commands["members"] = {
 				return m1 < m2
 			end)
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.info,
 					title = "<:lua:483421987499147292> Module Team Members [" .. #list .. "]",
@@ -1440,7 +1442,7 @@ commands["members"] = {
 }
 commands["mobile"] = {
 	description = "Sends a private message with the embed in a text format.",
-	syntax = prefix .. "mobile message\\_id",
+	syntax = prefix .. "mobile message_id",
 	fn = function(message, parameters)
 		parameters = parameters and string.match(parameters, "%d+")
 
@@ -1558,7 +1560,7 @@ commands["modules"] = {
 
 		if #list == 0 then
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.fail,
 					title = "<:wheel:456198795768889344> Modules",
@@ -1573,7 +1575,7 @@ commands["modules"] = {
 			local lines, msgs = splitByLine(out), { }
 			for line = 1, #lines do
 				msgs[line] =  message:reply({
-					content = (line == 1 and "<@!" .. message.author.id .. ">" or nil),
+					content = (line == 1 and "<@" .. message.author.id .. ">" or nil),
 					embed = {
 						color = color.info,
 						title = (line == 1 and "<:wheel:456198795768889344> [" .. #list .. "] Modules found" or nil),
@@ -1657,7 +1659,7 @@ commands["reject"] = {
 		local exists, playerName = playerExists(parameters)
 		if not exists then
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.fail,
 					title = "<:atelier:458403092417740824> Invalid user.",
@@ -1669,7 +1671,7 @@ commands["reject"] = {
 
 		local hasApplication = applicationExists(playerName)
 		local msg = message:reply({
-			content = "<@!" .. message.author.id .. "> | 0",
+			content = "<@" .. message.author.id .. "> | 0",
 			embed = {
 				color = color.info,
 				title = "<:atelier:458403092417740824> Confirmation",
@@ -1683,7 +1685,7 @@ commands["reject"] = {
 }
 commands["remind"] = {
 	description = "Sets a reminder. Bot will remind you.",
-	syntax = prefix .. "remind time\\_and\\_order text",
+	syntax = prefix .. "remind time_and_order text",
 	fn = function(message, parameters)
 		if not hasParam(message, parameters) then return end
 
@@ -1700,7 +1702,7 @@ commands["remind"] = {
 				time = math.clamp(time, .017, 6) * 3.6e6
 			else
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = ":timer: Invalid time magnitude order '" .. order .. "'",
@@ -1735,7 +1737,7 @@ commands["remind"] = {
 }
 commands["reply"] = {
 	description = "Answers a private message.",
-	syntax = prefix .. "reply conversation\\_id \\`\\`\\` BBCODE answer \\`\\`\\`",
+	syntax = prefix .. "reply conversation_id \\`\\`\\` BBCODE answer \\`\\`\\`",
 	connection = true,
 	highlevel = true,
 	fn = function(message, parameters)
@@ -1747,7 +1749,7 @@ commands["reply"] = {
 
 			if string.find(body, '<div class="modal%-body"> <p>  Interdit') then
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = "<:atelier:458403092417740824> Invalid conversation id.",
@@ -1759,7 +1761,7 @@ commands["reply"] = {
 
 			if #answer == 0 then
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = "<:atelier:458403092417740824> Empty reply content.",
@@ -1776,13 +1778,13 @@ commands["reply"] = {
 					embed = {
 						color = color.success,
 						title = "<:atelier:458403092417740824> Message Reply ( " .. co .. " )",
-						description = "<@!" .. message.author.id .. "> [" .. message.member.name .. "] replied the conversation **" .. co .. "** with the following content:\n```\n" .. answer .. "```"
+						description = "<@" .. message.author.id .. "> [" .. message.member.name .. "] replied the conversation **" .. co .. "** with the following content:\n```\n" .. answer .. "```"
 					}
 				})
 				message:delete()
 			else
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = "<:atelier:458403092417740824> Private Message Error",
@@ -1860,6 +1862,20 @@ commands["serverinfo"] = {
 		})
 	end
 }
+commands["tasks"] = {
+	description = "Displays the available tasks on the application form.",
+	fn = function(message)
+		toDelete[message.id] = message:reply({
+			content = "<@" .. message.author.id .. ">",
+			embed = {
+				color = color.info,
+				title = "<:atelier:458403092417740824> Application Tasks",
+				description = "**Task 3** [Fly and Ffa](https://www.google.com/url?q=https://gist.github.com/leafileaf/6924be6e7267a34a623bd65850d1cd92&sa=D&ust=1543431179059000&usg=AFQjCNE0n1TgyJcE7UE5gdWKe26Ik0NamQ)\n**Task 5** [Title colors (Optimization)](https://www.google.com/url?q=https://gist.github.com/leafileaf/7c7c25746bde9c0425e4569ec064b79b&sa=D&ust=1543431280572000&usg=AFQjCNENjlwfjOj_zTTshnjPbSJkl_gnOA)",
+			}
+		})
+	end
+
+}
 commands["terms"] = {
 	description = "Messages a player to inform their application got accepted.",
 	syntax = prefix .. "terms PlayerName#0000",
@@ -1871,7 +1887,7 @@ commands["terms"] = {
 		local exists, playerName = playerExists(parameters)
 		if not exists then
 			toDelete[message.id] = message:reply({
-				content = "<@!" .. message.author.id .. ">",
+				content = "<@" .. message.author.id .. ">",
 				embed = {
 					color = color.fail,
 					title = "<:atelier:458403092417740824> Invalid user.",
@@ -1883,7 +1899,7 @@ commands["terms"] = {
 
 		local hasApplication = applicationExists(playerName)
 		local msg = message:reply({
-			content = "<@!" .. message.author.id .. "> | 1",
+			content = "<@" .. message.author.id .. "> | 1",
 			embed = {
 				color = color.info,
 				title = "<:atelier:458403092417740824> Confirmation",
@@ -1893,6 +1909,28 @@ commands["terms"] = {
 
 		msg:addReaction(reactions.Y)
 		msg:addReaction(reactions.N)
+	end
+}
+commands["tex"] = {
+	description = "Displays a mathematical formula using LaTex syntax.",
+	syntax = prefix .. "tex LaTex_Formula",
+	fn = function(message, parameters)
+		if not hasParam(message, parameters) then return end
+
+		local head, body = http.request("POST", "http://quicklatex.com/latex3.f", nil, "formula=" .. encodeUrl(parameters) .. "&fsize=21px&fcolor=c2c2c2&out=1&preamble=\\usepackage{amsmath}\n\\usepackage{amsfonts}\n\\usepackage{amssymb}")
+		body = string.match(body, "(http%S+)")
+		if body then
+			head, body = http.request("GET", body)
+			if body then
+				local fileName = os.tmpname() .. ".png"
+				local file = io.open(fileName, 'w')
+				file:write(body)
+				file:flush()
+				file:close()
+				toDelete[message.id] = message:reply({ file = fileName })
+				os.remove(fileName)
+			end
+		end
 	end
 }
 commands["tree"] = {
@@ -1922,7 +1960,7 @@ commands["tree"] = {
 
 			if not pathExists then
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = "<:wheel:456198795768889344> Invalid path",
@@ -1963,7 +2001,7 @@ commands["tree"] = {
 		local msgs = { }
 		for line = 1, #lines do
 			msgs[line] = message:reply({
-				content = (line == 1 and "<@!" .. message.author.id .. ">" or nil),
+				content = (line == 1 and "<@" .. message.author.id .. ">" or nil),
 				embed = {
 					color = color.info,
 					title = (line == 1 and "<:wheel:456198795768889344> " .. (parameters and ("'" .. parameters .. "' ") or "") .. "Tree" or nil),
@@ -2029,7 +2067,7 @@ commands["upload"] = {
         
 					if image == 1 then
 						refMessage = channel:send({
-							content = "<@!" .. mt_member .. ">",
+							content = "<@" .. mt_member .. ">",
 							embed = {
 								color = color.success,
 								title = (len > 0 and ":warning: " or "") .. "<:atelier:458403092417740824> Image album upload [ 1 / " .. counter .. " ]",
@@ -2059,7 +2097,7 @@ commands["upload"] = {
 				}
 
 				toDelete[message.id] = channel:send({
-					content = "<@!" .. mt_member .. ">",
+					content = "<@" .. mt_member .. ">",
 					embed = embed
 				})
 				if shades_requester then
@@ -2092,7 +2130,7 @@ commands["upload"] = {
 			}
 
 			toDelete[message.id] = channel:send({
-				content = "<@!" .. mt_member .. ">",
+				content = "<@" .. mt_member .. ">",
 				embed = embed
 			})
 			if shades_requester then
@@ -2117,7 +2155,7 @@ commands["upload"] = {
 			}
 
 			toDelete[message.id] = channel:send({
-				content = "<@!" .. mt_member .. ">",
+				content = "<@" .. mt_member .. ">",
 				embed = embed
 			})
 			if shades_requester then
@@ -2147,7 +2185,7 @@ commands["upload"] = {
 				}
 
 				channel:send({
-					content = "<@!" .. mt_member .. ">",
+					content = "<@" .. mt_member .. ">",
 					embed = embed
 				})
 				client:getUser(mt_member):send({ embed = embed })
@@ -2169,7 +2207,7 @@ commands["upload"] = {
 				}
 
 				toDelete[message.id] = channel:send({
-					content = "<@!" .. mt_member .. ">",
+					content = "<@" .. mt_member .. ">",
 					embed = embed
 				})
 				if shades_requester then
@@ -2241,7 +2279,7 @@ local messageCreate = function(message)
 
 	-- Checks if the message pinged the bot
 	if string.find(message.content, "<@!?" .. client.user.id .. ">") then
-		toDelete[message.id] = message:reply("<@!" .. message.author.id .. ">\n" .. table.random(greetings) .. "\n\nMy prefix is `" .. prefix .. "`. Type `" .. prefix .. "help` to learn more!")
+		toDelete[message.id] = message:reply("<@" .. message.author.id .. ">\n" .. table.random(greetings) .. "\n\nMy prefix is `" .. prefix .. "`. Type `" .. prefix .. "help` to learn more!")
 		return
 	end
 
@@ -2271,7 +2309,7 @@ local messageCreate = function(message)
 		if not hasPermission(message.member, (commands[command].highlevel and roles.helper or roles.dev)) then
 			if not commands[command].sys then
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.fail,
 						title = "Authorization denied.",
@@ -2285,7 +2323,7 @@ local messageCreate = function(message)
 		if commands[command].connection then
 			if not forumClient or not forumClient:isConnected() then
 				toDelete[message.id] = message:reply({
-					content = "<@!" .. message.author.id .. ">",
+					content = "<@" .. message.author.id .. ">",
 					embed = {
 						color = color.error,
 						title = "Forum account not connected yet. Try again later."
@@ -2337,7 +2375,7 @@ local reactionAdd = function(cached, channel, messageId, emojiName, userId)
 		if message.embed then
 			local confirmation = string.find(message.embed.title or "", "Confirmation")
 			if confirmation then
-				local user, state = string.match(message.content, "^<@!?(%d+)> | ([01])$")
+				local user, state = string.match(message.content, "^<@(%d+)> | ([01])$")
 				if user ~= userId then return end
 
 				local member = message.guild:getMember(user)
@@ -2345,7 +2383,7 @@ local reactionAdd = function(cached, channel, messageId, emojiName, userId)
 					if emojiName == reactions.Y then
 						local playerName = string.match(message.embed.description, "%*%*(.-)%*%*")
 
-						local desc = "<:atelier:458403092417740824> <@!" .. user .. "> (`" .. member.name .. "`) "
+						local desc = "<:atelier:458403092417740824> <@" .. user .. "> (`" .. member.name .. "`) "
 
 						message:clearReactions()
 						message:setContent("")
@@ -2434,7 +2472,7 @@ local memberJoin = function(member)
 		client:getChannel(channels.logs):send({
 			embed = {
 				color = color.info,
-				description = "<@!" .. member.id .. "> [" .. member.name .. "] just joined the server!"
+				description = "<@" .. member.id .. "> [" .. member.name .. "] just joined the server!"
 			}
 		})
 	end
